@@ -76,7 +76,7 @@ class SegmentSet(data.Dataset):
     scans_path and masks_path are the paths of the folders containing the data
     mode : 2d will return slices
   """
-  def __init__(self, list_scans, scans_path, mode = "3d", scan_size = [128, 128, 128]):
+  def __init__(self, list_scans, scans_path, mode = "3d", scan_size=[128, 128, 128]):
     self.list_scans = list_scans
     self.scans_path = scans_path
     self.mode = mode
@@ -103,9 +103,6 @@ class SegmentSet(data.Dataset):
       ct_scanOrig = series_reader.Execute() #-Get images
     else:
       ct_scanOrig = sitk.ReadImage(path+"/"+scan)
-
-    print("ID is", scan[:-4])
-    scan_dicom_id = scan[:-4]
 
     #ct_scan=sitk.GetImageFromArray(ct_scan)
     ct_scan=resampleImage(ct_scanOrig, self.scan_size)

@@ -54,11 +54,23 @@ Here is an example from one of my repos.
 ```
 
 Description of scripts
-Example scripts are:
+
+Toy example scripts are:
 ```bash
 ├── abc.py : create XYZ
 ├── abc_post.py : post-processing script to get XYZ
 ├── plot_abc.py : plot output of post-processing script
+```
+
+real example :
+```bash
+├── formatLandmarks_diameterFromSurface.py : create airway landmarks with interpolated points 
+|                                             on branch segments and points on surface of mesh
+├── gtToReconstructionLMdiff.py : post-processing script to get distance between reconstructed 
+|                                 landmarks and some morphological parameters 
+|                                  (branch length + angle)
+├── tschirrenSkeletonise.py : skeletonise a mhd file and clean up with networkx.
+                              Loosely based on Tschirren et al. (2004)
 ```
 
 

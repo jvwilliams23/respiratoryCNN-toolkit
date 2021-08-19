@@ -4,12 +4,93 @@ from glob import glob
 import torch
 from torch.utils import data
 import SimpleITK as sitk
+from skimage import morphology
+from skimage.measure import label, regionprops
 from . import utils
 
 def truncate(image, min_bound, max_bound):
     image[image < min_bound] = min_bound
     image[image > max_bound] = max_bound
     return image
+
+def rg_based_crop_for_cnn(image):
+    """
+    Use a connected-threshold estimator to separate background and foreground. 
+    Then crop the image using the foreground's axis aligned bounding box.
+    Args:
+        image (SimpleITK image): An image where the anatomy and background intensities form a bi-modal distribution
+                                 (the assumption underlying Otsu's method.)
+        seed (list)            : Seed point to grow region from
+    Return:
+        Cropped image based on foreground's axis aligned bounding box. 
+        seed point amended to keep the same relative position.                                
+    """
+    # Set pixels that are in [min_intensity,otsu_threshold] to inside_value, values above otsu_threshold are
+    # set to outside_value. The anatomy has higher intensity values than the background, so it is outside.
+    lower, upper = -1500, -500 #Hard coded estimates
+    # myshow(image>-200)
+
+    image_island = getLargestIsland(image > -200) #> 50 & image < 2000 #uppe
+
+    label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
+    label_shape_filter.Execute( image_island )
+    bounding_box = label_shape_filter.GetBoundingBox(1) #-1 due to binary nature of threshold
+    #-The bounding box's first "dim" entries are the starting index and last "dim" entries the size
+    roi = sitk.RegionOfInterest(image, 
+                                bounding_box[int(len(bounding_box)/2):], 
+                                bounding_box[0:int(len(bounding_box)/2)]
+                                )
+    # myshow(roi)
+    size = np.array(roi.GetSize())
+    seed = [int(size[0]//4), int(size[1]//2), int(size[2]//2)]
+    rg = sitk.ConnectedThreshold(roi, seedList=[seed],
+                              lower=-1000, upper=-500)
+
+
+    # get largest internal island of air (should be lungs)
+    image_island = getLargestIsland(rg) #> 50 & image < 2000 #uppe
+    label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
+    label_shape_filter.Execute( image_island )
+
+    # get bounding box as xmin, ymin, zmin, xmax, ymax, zmax
+    # get bounding box as xstart, ystart, zstart, xsize, ysize, zsize
+    bounding_box = list(label_shape_filter.GetBoundingBox(1)) #-1 due to binary nature of threshold
+    print(bounding_box[0], bounding_box[3])
+    bounding_x_size = bounding_box[3]
+    crop_fraction = 0.2
+    bounding_box[0] = int(round(bounding_box[0] + bounding_x_size*crop_fraction))
+    bounding_box[3] = int(round(bounding_x_size*(1-2*crop_fraction)))
+    print(bounding_box[0], bounding_box[3])
+    #-The bounding box's first "dim" entries are the starting index and last "dim" entries the size
+    # exit()
+    roi = sitk.RegionOfInterest(roi, 
+                                bounding_box[int(len(bounding_box)/2):], 
+                                bounding_box[0:int(len(bounding_box)/2)]
+                                )
+
+    return roi
+
+def getLargestIsland(segmentation):
+  '''
+  Take binary segmentation, as sitk.Image or np.ndarray,
+  and return largest connected 'island'.
+  '''
+  if type(segmentation) == sitk.Image:
+      seg_sitk = True
+      segmentation = sitk.GetArrayFromImage(segmentation).astype(np.int16)
+  
+  labels = label(segmentation).astype(np.int16) #-get connected component
+  assert( labels.max() != 0 ) # assume at least 1 connected component
+  #-get largest connected region (converts from True/False to 1/0)
+  largestIsland = np.array(
+                          labels==np.argmax(np.bincount(labels.flat)[1:])+1,
+                          dtype=np.int8
+                          )
+  #-if sitk.Image input, return type sitk.Image
+  if seg_sitk:
+      largestIsland = sitk.GetImageFromArray(largestIsland)
+  return largestIsland
+
 
 def resampleImage(imageIn, scanSize=[256, 256, 128], allAxes = True, interpolator=sitk.sitkLinear):
     '''
@@ -105,8 +186,10 @@ class SegmentSet(data.Dataset):
       ct_scanOrig = sitk.ReadImage(path+"/"+scan)
 
     #ct_scan=sitk.GetImageFromArray(ct_scan)
-    ct_scan=resampleImage(ct_scanOrig, self.scan_size)
-    ct_scan=sitk.GetArrayFromImage(ct_scan)
+    #ct_scan=resampleImage(ct_scanOrig, self.scan_size)
+    #ct_scan=sitk.GetArrayFromImage(ct_scan)
+    ct_scanOrig = rg_based_crop_for_cnn(ct_scanOrig)
+    ct_scan=sitk.GetArrayFromImage(ct_scanOrig)
     minCutoff = -1000
     ct_scan=truncate(ct_scan, minCutoff, 600)
     ct_scan=(ct_scan-(minCutoff)) / 1600 # normalise HU

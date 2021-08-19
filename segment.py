@@ -49,17 +49,22 @@ for i in range(len(list_scans)):
         segID = 'CASE'+list_scans[i].split('CASE')[1][:2]
     print("-"*30,"Getting and pre-processing scan")
     print('writeID is', segID)
+    # get data item i
     X, X_orig = dataset.__getitem__(i)
+    print('X shape is',X.shape)
+    # format data to be read by NN
     X = torch.Tensor(np.array([X.astype(np.float16)])).to(device) #scan
     print("-"*30, "Getting probabilities")
     logits = unet(X)
     print("-"*30, "Getting label map")
     labelMap = torch.max(logits[0],0)[1].numpy()
+    print('shape is', labelMap.shape)
     labelMap = np.swapaxes(labelMap, 0, 2)
     print("-"*30, "Getting largest island for each label")
     segmentation = [None]*len([1])
     for l, label in enumerate([1]):
         segmentation[l] = utils.getLargestIsland(labelMap==label)
+        # change shape to correct orientation for comparing with ground truths
         segmentation[l] = sitk.GetImageFromArray(np.array(segmentation[l],dtype=np.int8))
         segmentation[l] = sitk.GetArrayFromImage(segmentation[l])
         segmentation[l] = np.swapaxes(segmentation[l], 1, 2)
@@ -68,9 +73,17 @@ for i in range(len(list_scans)):
         print("-"*30, "Upsampling label map", label)
         segmentation[l] = sitk.GetImageFromArray(segmentation[l])
         segmentation[l] = resampleImage(segmentation[l], X_orig.GetSize(), interpolator=sitk.sitkNearestNeighbor)
+        # get metadata from original ct dataset
         segmentation[l].SetOrigin(X_orig.GetOrigin())
         segmentation[l].SetSpacing(X_orig.GetSpacing())
+        # add extra layer of voxels to make closed surface
+        pad = sitk.ConstantPadImageFilter()
+        pad.SetPadLowerBound((1,1,1))
+        pad.SetPadUpperBound((1,1,1))
+        pad.SetConstant(0)
+        segmentation[l] = pad.Execute(segmentation[l])
         print("-"*30, "Writing label map", label)
+        # output data
         sitk.WriteImage(segmentation[l], "./segmentations/seg-{0}-{1}.mhd".format(segID, "aw"))
         utils.binaryLabelToSTL("./segmentations/seg-{0}-{1}.mhd".format(segID, "aw"),
                     "./segmentations/{0}_mm_{1}.stl".format(segID, "aw"))

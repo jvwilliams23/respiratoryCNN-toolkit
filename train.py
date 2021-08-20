@@ -100,7 +100,8 @@ def stop_training():
         print("gradient = ",gradient,"exiting")
         exit(0)
 
-if config["mode"] == "3d":
+run_mode = '3d'
+if run_mode == "3d":
   print("Running 3D")
   try:
     All_scans = st_scans[:]

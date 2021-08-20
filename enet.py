@@ -41,19 +41,19 @@ class InitialBlock(nn.Module):
         # Main branch - As stated above the number of output channels for this
         # branch is the total minus 3, since the remaining channels come from
         # the extension branch
-        self.main_branch = nn.Conv2d(
+        self.main_branch = nn.Conv3d(
             in_channels,
-            out_channels - 3,
+            out_channels - 1,
             kernel_size=3,
             stride=2,
             padding=1,
             bias=bias)
 
         # Extension branch
-        self.ext_branch = nn.MaxPool2d(3, stride=2, padding=1)
+        self.ext_branch = nn.MaxPool3d(3, stride=2, padding=1)
 
         # Initialize batch normalization to be used after concatenation
-        self.batch_norm = nn.BatchNorm2d(out_channels)
+        self.batch_norm = nn.BatchNorm3d(out_channels)
 
         # PReLU layer to apply after concatenating the branches
         self.out_activation = activation()
@@ -143,55 +143,63 @@ class RegularBottleneck(nn.Module):
 
         # 1x1 projection convolution
         self.ext_conv1 = nn.Sequential(
-            nn.Conv2d(
+            nn.Conv3d(
                 channels,
                 internal_channels,
                 kernel_size=1,
                 stride=1,
-                bias=bias), nn.BatchNorm2d(internal_channels), activation())
+                bias=bias), nn.BatchNorm3d(internal_channels), activation())
 
         # If the convolution is asymmetric we split the main convolution in
         # two. Eg. for a 5x5 asymmetric convolution we have two convolution:
         # the first is 5x1 and the second is 1x5.
         if asymmetric:
             self.ext_conv2 = nn.Sequential(
-                nn.Conv2d(
+                nn.Conv3d(
                     internal_channels,
                     internal_channels,
-                    kernel_size=(kernel_size, 1),
+                    kernel_size=(kernel_size, 1, 1),
                     stride=1,
-                    padding=(padding, 0),
+                    padding=(padding, 0, 0),
                     dilation=dilation,
-                    bias=bias), nn.BatchNorm2d(internal_channels), activation(),
-                nn.Conv2d(
+                    bias=bias), nn.BatchNorm3d(internal_channels), activation(),
+                nn.Conv3d(
                     internal_channels,
                     internal_channels,
-                    kernel_size=(1, kernel_size),
+                    kernel_size=(1, kernel_size, 1),
                     stride=1,
-                    padding=(0, padding),
+                    padding=(0, padding, 0),
                     dilation=dilation,
-                    bias=bias), nn.BatchNorm2d(internal_channels), activation())
+                    bias=bias), nn.BatchNorm3d(internal_channels), activation(),
+                nn.Conv3d(
+                    internal_channels,
+                    internal_channels,
+                    kernel_size=(1, 1, kernel_size),
+                    stride=1,
+                    padding=(0, 0, padding),
+                    dilation=dilation,
+                    bias=bias), nn.BatchNorm3d(internal_channels), activation())
         else:
             self.ext_conv2 = nn.Sequential(
-                nn.Conv2d(
+                nn.Conv3d(
                     internal_channels,
                     internal_channels,
                     kernel_size=kernel_size,
                     stride=1,
                     padding=padding,
                     dilation=dilation,
-                    bias=bias), nn.BatchNorm2d(internal_channels), activation())
+                    bias=bias), nn.BatchNorm3d(internal_channels), activation())
 
         # 1x1 expansion convolution
         self.ext_conv3 = nn.Sequential(
-            nn.Conv2d(
+            nn.Conv3d(
                 internal_channels,
                 channels,
                 kernel_size=1,
                 stride=1,
-                bias=bias), nn.BatchNorm2d(channels), activation())
+                bias=bias), nn.BatchNorm3d(channels), activation())
 
-        self.ext_regul = nn.Dropout2d(p=dropout_prob)
+        self.ext_regul = nn.Dropout3d(p=dropout_prob)
 
         # PReLU layer to apply after adding the branches
         self.out_activation = activation()
@@ -273,7 +281,7 @@ class DownsamplingBottleneck(nn.Module):
             activation = nn.PReLU
 
         # Main branch - max pooling followed by feature map (channels) padding
-        self.main_max1 = nn.MaxPool2d(
+        self.main_max1 = nn.MaxPool3d(
             2,
             stride=2,
             return_indices=return_indices)
@@ -284,33 +292,33 @@ class DownsamplingBottleneck(nn.Module):
 
         # 2x2 projection convolution with stride 2
         self.ext_conv1 = nn.Sequential(
-            nn.Conv2d(
+            nn.Conv3d(
                 in_channels,
                 internal_channels,
                 kernel_size=2,
                 stride=2,
-                bias=bias), nn.BatchNorm2d(internal_channels), activation())
+                bias=bias), nn.BatchNorm3d(internal_channels), activation())
 
         # Convolution
         self.ext_conv2 = nn.Sequential(
-            nn.Conv2d(
+            nn.Conv3d(
                 internal_channels,
                 internal_channels,
                 kernel_size=3,
                 stride=1,
                 padding=1,
-                bias=bias), nn.BatchNorm2d(internal_channels), activation())
+                bias=bias), nn.BatchNorm3d(internal_channels), activation())
 
         # 1x1 expansion convolution
         self.ext_conv3 = nn.Sequential(
-            nn.Conv2d(
+            nn.Conv3d(
                 internal_channels,
                 out_channels,
                 kernel_size=1,
                 stride=1,
-                bias=bias), nn.BatchNorm2d(out_channels), activation())
+                bias=bias), nn.BatchNorm3d(out_channels), activation())
 
-        self.ext_regul = nn.Dropout2d(p=dropout_prob)
+        self.ext_regul = nn.Dropout3d(p=dropout_prob)
 
         # PReLU layer to apply after concatenating the branches
         self.out_activation = activation()
@@ -329,9 +337,9 @@ class DownsamplingBottleneck(nn.Module):
         ext = self.ext_regul(ext)
 
         # Main branch channel padding
-        n, ch_ext, h, w = ext.size()
+        n, ch_ext, h, w, d = ext.size()
         ch_main = main.size()[1]
-        padding = torch.zeros(n, ch_ext - ch_main, h, w)
+        padding = torch.zeros(n, ch_ext - ch_main, h, w, d)
 
         # Before concatenating, check if main is on the CPU or GPU and
         # convert padding accordingly
@@ -406,12 +414,12 @@ class UpsamplingBottleneck(nn.Module):
 
         # Main branch - max pooling followed by feature map (channels) padding
         self.main_conv1 = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=bias),
-            nn.BatchNorm2d(out_channels))
+            nn.Conv3d(in_channels, out_channels, kernel_size=1, bias=bias),
+            nn.BatchNorm3d(out_channels))
 
         # Remember that the stride is the same as the kernel_size, just like
         # the max pooling layers
-        self.main_unpool1 = nn.MaxUnpool2d(kernel_size=2)
+        self.main_unpool1 = nn.MaxUnpool3d(kernel_size=2)
 
         # Extension branch - 1x1 convolution, followed by a regular, dilated or
         # asymmetric convolution, followed by another 1x1 convolution. Number
@@ -419,27 +427,27 @@ class UpsamplingBottleneck(nn.Module):
 
         # 1x1 projection convolution with stride 1
         self.ext_conv1 = nn.Sequential(
-            nn.Conv2d(
+            nn.Conv3d(
                 in_channels, internal_channels, kernel_size=1, bias=bias),
-            nn.BatchNorm2d(internal_channels), activation())
+            nn.BatchNorm3d(internal_channels), activation())
 
         # Transposed convolution
-        self.ext_tconv1 = nn.ConvTranspose2d(
+        self.ext_tconv1 = nn.ConvTranspose3d(
             internal_channels,
             internal_channels,
             kernel_size=2,
             stride=2,
             bias=bias)
-        self.ext_tconv1_bnorm = nn.BatchNorm2d(internal_channels)
+        self.ext_tconv1_bnorm = nn.BatchNorm3d(internal_channels)
         self.ext_tconv1_activation = activation()
 
         # 1x1 expansion convolution
         self.ext_conv2 = nn.Sequential(
-            nn.Conv2d(
+            nn.Conv3d(
                 internal_channels, out_channels, kernel_size=1, bias=bias),
-            nn.BatchNorm2d(out_channels))
+            nn.BatchNorm3d(out_channels))
 
-        self.ext_regul = nn.Dropout2d(p=dropout_prob)
+        self.ext_regul = nn.Dropout3d(p=dropout_prob)
 
         # PReLU layer to apply after concatenating the branches
         self.out_activation = activation()
@@ -481,7 +489,7 @@ class ENet(nn.Module):
     def __init__(self, num_classes, encoder_relu=False, decoder_relu=True):
         super().__init__()
 
-        self.initial_block = InitialBlock(3, 16, relu=encoder_relu)
+        self.initial_block = InitialBlock(1, 16, relu=encoder_relu)
 
         # Stage 1 - Encoder
         self.downsample1_0 = DownsamplingBottleneck(
@@ -574,7 +582,7 @@ class ENet(nn.Module):
             64, 16, dropout_prob=0.1, relu=decoder_relu)
         self.regular5_1 = RegularBottleneck(
             16, padding=1, dropout_prob=0.1, relu=decoder_relu)
-        self.transposed_conv = nn.ConvTranspose2d(
+        self.transposed_conv = nn.ConvTranspose3d(
             16,
             num_classes,
             kernel_size=3,

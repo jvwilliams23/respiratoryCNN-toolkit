@@ -1,4 +1,6 @@
 {
+// configuration for CNN training
+// file must be read with hjson 'pip install hjson', or remove comments
     "path" :
     {
         //  training data images

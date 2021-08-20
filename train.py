@@ -202,7 +202,7 @@ for epoch in range(epochs):
     loss.backward()#retain_graph=True)
     optimizer.step()
     print("Epoch {} ==> Batch {} mean loss : {}".format(epoch+1, 
-                                                        (i+1)%(config["train3d"]["train_size"]), 
+                                                        (i+1)%(len(train_data)+aug_iters), 
                                                         loss.item()/batch_size))
     epoch_loss += loss/batch_size
     del batch

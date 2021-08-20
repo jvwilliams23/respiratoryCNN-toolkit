@@ -1,0 +1,36 @@
+{
+  "mode" : "3d",
+  
+  "path" :
+    {
+      "scans" : "/data/alc5/data/scans/cropped/airways",
+      "masks" : "/data/alc5/data/segmentations/cropped/airways",
+      "labelled_list" : "/data/alc5/data/segmentations/cropped/airways",
+      "test_scans" : "/data/jw144/project/medicalImages/EXACT09/Testing/CASEID/",
+      "unseen_masks": "/data/alc5/data/testData/segmentations",
+      "unseen_scans": "/data/alc5/data/testData/scans"
+    },
+
+  "train3d" :
+    {
+      "model" : "ENet",
+      "epochs" : 300,
+      "batch_size" : 1,
+      "lr" : 1e-4,
+      "scan_size" : [160,160,160],
+      "start_filters" : 32,
+      "train_size" : 40,
+      "validation_size" : 10,
+      "n_classes" : 2,
+      "aug_iters" : 500,
+      "test_size" : 10,
+      "gamma_in_loss" : 5
+    },
+   "segment3d" :
+    {
+      "scan_size" : [160,160,160],
+      "n_classes" : 2
+    },
+
+}
+

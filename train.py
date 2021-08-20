@@ -1,5 +1,5 @@
 import numpy as np
-import pickle, json, os
+import pickle, hjson, os
 import torch
 from torch.utils import data
 import torch.optim as optim
@@ -8,7 +8,8 @@ from torch.nn import functional as F
 from glob import glob
 import SimpleITK as sitk
 
-import model
+from model import UNet
+from enet import ENet
 from data import *
 from myshow import *
 import matplotlib.pyplot as plt
@@ -25,8 +26,8 @@ from sys import exit
 torch.backends.cudnn.benchmark = True
 
 #-Open and load configurations.
-with open("config.json") as f:
-  config = json.load(f)
+with open("trainconfig.json") as f:
+  config = hjson.load(f)
 
 device = torch.device("cpu")
 #with open(config["path"]["scans"], "rb") as f:
@@ -113,38 +114,43 @@ if config["mode"] == "3d":
   print("validation scans: ")
   for a in val_scans:
     print(a)
-  train_data = dataset.Dataset(train_scans, config["path"]["scans"], config["path"]["masks"], mode="3d", scan_size = config["train3d"]["scan_size"], n_classes = config["train3d"]["n_classes"])
+
+  # pack all dataset info into one list for readability
+  dataset_params = [config["path"]["scans"], config["path"]["masks"], 
+                    config["train3d"]["scan_size"], config["train3d"]["n_classes"]]
+  # read data splits
+  train_data = dataset.Dataset(train_scans, *dataset_params)
   print("train_data OK. Number of scans: ",len(train_data))
-  #list_scans = train_scans #scans_path = config["path"]["scans"] #masks_path = config["path"]["masks"]
-  val_data = dataset.Dataset(val_scans, config["path"]["scans"], config["path"]["masks"], mode = "3d", scan_size = config["train3d"]["scan_size"], n_classes = config["train3d"]["n_classes"])
-  unet = model.UNet(1,config["train3d"]["n_classes"], config["train3d"]["start_filters"], bilinear = False).to(device)
+  val_data = dataset.Dataset(val_scans, *dataset_params)
+
+  # select which model to train
+  if config["train3d"]["model"].lower() == 'unet':
+    print("Training UNet")
+    model = UNet(1,config["train3d"]["n_classes"], config["train3d"]["start_filters"], bilinear = False).to(device)
+    model_string = 'unet' # string to use for saving the model
+  elif config["train3d"]["model"].lower() == 'enet':
+    print("Training ENet")
+    model = ENet(config["train3d"]["n_classes"]).to(device)
+    model_string = 'enet' # string to use for saving the model
+  else:
+   print('Unrecognised model. Exiting.')
+   exit()
   criterion = utils.lossTang2019 #utils.dice_loss_old #utils.compute_dice_coefficient #utils.dice_loss
-  optimizer = optim.Adam(unet.parameters(), lr = config["train3d"]["lr"])
+  # gamma in Focal loss to increase weighting for voxel imbalance
+  gamma = config["train3d"]["gamma_in_loss"] 
+  optimizer = optim.Adam(model.parameters(), lr = config["train3d"]["lr"])
   batch_size = config["train3d"]["batch_size"]
   epochs = config["train3d"]["epochs"]
-  val_steps = config["train3d"]["validation_steps"]
   val_size = config["train3d"]["validation_size"]
   print("End of data adquisition")
-else:
-  print("Running 2D")
-  st_scans = st_scans[:config["train2d"]["train_size"]]
-  #dataset = dataset.Dataset(st_scans, config["path"]["scans"], config["path"]["masks"], mode = "2d")
-  train_data = dataset.Dataset(st_scans, config["path"]["scans"], config["path"]["masks"], mode = "2d")
-  unet = model.UNet(1,1, config["train2d"]["start_filters"], bilinear = True).to(device)
-  criterion = utils.dice_loss
-  optimizer = optim.Adam(unet.parameters(), lr = config["train2d"]["lr"])
-  batch_size = config["train2d"]["batch_size"]
-  slices_per_batch = config["train2d"]["slices_per_batch"]
-  neg = config["train2d"]["neg_examples_per_batch"]
-  epochs = config["train2d"]["epochs"]
-#crop image
-#def crop_image(image):
-    
+   
+
+ 
 # augmentation pipeline for images
 aug_images = iaa.Sequential([
     iaa.Rotate((-15.0,15.0)),
     iaa.AdditiveGaussianNoise(scale=(0.0,0.5))
-])#alpha is representative of initial displacement, sigma is representative of smoothing strength
+])
 
 # augmentation pipeline for segmentation maps - with coarse dropout, but without gaussian noise
 aug_segmaps = iaa.Sequential([
@@ -152,7 +158,7 @@ aug_segmaps = iaa.Sequential([
 ])
 
 aug_iters = config["train3d"]["aug_iters"] 
-unet.train()
+model.train()
 best_val_loss = 1e16
 for epoch in range(epochs):
   if epoch > 30:
@@ -161,6 +167,7 @@ for epoch in range(epochs):
   for i in range(0, len(train_data)+aug_iters, batch_size):
     losses = torch.ones(config["train3d"]["n_classes"])
     batch_loss = 0
+    # when iterated through all training data, augment data
     if i >= len(train_data):
        augID = np.random.randint(len(train_data)-batch_size-1) #-pick random ID to augment 
        print("Augmenting patient", augID)
@@ -175,44 +182,40 @@ for epoch in range(epochs):
        batch[0][0] = aug_images_.augment_image(batch[0][0])
        labels[0][0] = aug_segmaps_.augment_image(labels[0][0])
     else:
+       # read training image ('batch') and label from train_data class
        batch = np.array([train_data.__getitem__(j)[0] for j in range(i, i+batch_size)]).astype(np.float16)
        labels = np.array([train_data.__getitem__(j)[1] for j in range(i, i+batch_size)]).astype(np.int8) 
+
+
     batch = torch.Tensor(batch).to(device)
     labels = torch.Tensor(labels).to(device)
     batch.requires_grad = True
     labels.requires_grad = True
-    #print("CHECK", torch.sum(labels==0), torch.sum(labels==1), torch.sum(labels==2))
-    #exit()
     optimizer.zero_grad()
-    logits = unet(batch)
-    print(type(logits))
-    #loss = criterion(torch.max(logits,1)[1].numpy()[0], labels.detach().numpy()[0][0])
+    # get probabilities for training data
+    logits = model(batch)
+    # get loss in training data for each class in sample
     for c, channel in enumerate(losses): 
-      losses[c] = criterion(torch.nn.functional.softmax(logits, dim=1)[0][c], labels,c)
+      losses[c] = criterion(torch.nn.functional.softmax(logits, dim=1)[0][c], labels, c, gamma=gamma)
     print("LOSSES ARE", losses)
-    
-    #print("CHECK", torch.sum(labels==0), torch.sum(labels==1), torch.sum(labels==2))
-    #exit()
-    
     loss = torch.mean(losses)
     loss.backward()#retain_graph=True)
     optimizer.step()
-    print("Epoch {} ==> Batch {} mean loss : {}".format(epoch+1, (i+1)%(val_steps), loss.item()/batch_size))
+    print("Epoch {} ==> Batch {} mean loss : {}".format(epoch+1, 
+                                                        (i+1)%(config["train3d"]["train_size"]), 
+                                                        loss.item()/batch_size))
     epoch_loss += loss/batch_size
     del batch
     del labels
     del logits
     torch.cuda.empty_cache()
-    print("val_steps =",val_steps)
-    
-    #if (i+1)%val_steps == 0:
+    # calculate validation loss after last training sample in epoch
     if i==len(train_data)-1:
       print("===================> Calculating validation loss ... ")
       ids = np.random.randint(0, len(val_data), val_size)
       print("ids", ids)
       val_loss = 0
-      loop=0
-      for scan_id in ids:
+      for loop, scan_id in enumerate(ids):
         print("Number of ids. ", ids)
         losses = torch.ones(config["train3d"]["n_classes"])
         batch = np.array([val_data.__getitem__(j)[0] for j in range(scan_id, scan_id+batch_size)]).astype(np.float16)
@@ -222,25 +225,24 @@ for epoch in range(epochs):
 
         batch = torch.Tensor(batch).to(device)
         labels = torch.Tensor(labels).to(device)
-        loop+=1
         print("Loop no. ", loop)
-        logits = unet(batch)
+        # calculate probabilities for validation set
+        logits = model(batch)
+        # loss for each class in validation sample i
         for c, channel in enumerate(losses):
-          losses[c] = criterion(torch.nn.functional.softmax(logits, dim=1)[0][c], labels,c)
-          #losses[c] = criterion(torch.max(logits,1)[1][0], labels[0][0], c+1
+          losses[c] = criterion(torch.nn.functional.softmax(logits, dim=1)[0][c], labels, c, gamma=gamma)
         loss = torch.mean(losses)
-        #loss = criterion(torch.max(logits,1)[1][0], labels[0][0], np.arange(1,6))
-        #loss = criterion(torch.max(logits,1)[1].numpy()[0], labels.detach().numpy()[0][0])
-        #loss = criterion(logits, labels)
         val_loss += loss.item()
+        # clean up to preserve RAM
         del batch 
         del labels
         del logits
         del losses
       val_loss /= val_size
       print("\n # Validation Loss : ", val_loss)
+      # check if new model is better than best loss before saving
       if val_loss < best_val_loss:
         print("\nSaving Better Model... ")
-        torch.save(unet.state_dict(), "./model.pt")
+        torch.save(model.state_dict(), "./{}model.pt".format(model_string+'-'))
         best_val_loss = val_loss
       print("\n")

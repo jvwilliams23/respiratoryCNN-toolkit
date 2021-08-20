@@ -76,13 +76,11 @@ class Dataset(data.Dataset):
   """
     list_scans is a list containing the filenames of scans
     scans_path and masks_path are the paths of the folders containing the data
-    mode : 2d will return slices
   """
-  def __init__(self, list_scans, scans_path, masks_path, mode = "3d", scan_size = [128, 128, 128], n_classes = 5):
+  def __init__(self, list_scans, scans_path, masks_path, scan_size = [128, 128, 128], n_classes = 5):
     self.list_scans = list_scans
     self.scans_path = scans_path
     self.masks_path = masks_path
-    self.mode = mode
     self.scan_size = scan_size
     self.n_classes = n_classes
 
@@ -132,27 +130,22 @@ class Dataset(data.Dataset):
       seg_mask[seg_mask >  1] = 0
       
   
-    if self.mode == "3d":
-      ct_scan=sitk.GetImageFromArray(ct_scan)
-      seg_mask=sitk.GetImageFromArray(seg_mask)
-      #ct_scan=resampleImage(ct_scan, self.scan_size)	#changed to remove downsampling
-      #seg_mask=resampleImage(seg_mask, self.scan_size) #changed to remove downsampling
-      ct_scan=sitk.GetArrayFromImage(ct_scan)
-      seg_mask=sitk.GetArrayFromImage(seg_mask)
-      if np.min(ct_scan.ravel()) < -1100:
-        minCutoff = np.partition(np.unique(ct_scan.ravel()),2)[1]
-      else:
-        minCutoff=np.min(ct_scan.ravel())
-      #minCutoff = -1000
-      #ct_scan=truncate(ct_scan, minCutoff, -600)
-      #ct_scan=(ct_scan-(minCutoff))/400 #abs(minCutoff) # normalise HU
-      minCutoff = -1000
-      ct_scan=truncate(ct_scan, minCutoff, 600)
-      ct_scan=(ct_scan-(minCutoff)) / 1600 # normalise HU
-
-    if self.mode == "2d":
-      #return ct_scan[:, np.newaxis, :], seg_mask[:, np.newaxis, :]
-      return ct_scan[np.newaxis, :], seg_mask[np.newaxis, :]
+    ct_scan=sitk.GetImageFromArray(ct_scan)
+    seg_mask=sitk.GetImageFromArray(seg_mask)
+    #ct_scan=resampleImage(ct_scan, self.scan_size)	#changed to remove downsampling
+    #seg_mask=resampleImage(seg_mask, self.scan_size) #changed to remove downsampling
+    ct_scan=sitk.GetArrayFromImage(ct_scan)
+    seg_mask=sitk.GetArrayFromImage(seg_mask)
+    if np.min(ct_scan.ravel()) < -1100:
+      minCutoff = np.partition(np.unique(ct_scan.ravel()),2)[1]
     else:
-      return ct_scan[np.newaxis, :], seg_mask[np.newaxis, :]
+      minCutoff=np.min(ct_scan.ravel())
+    #minCutoff = -1000
+    #ct_scan=truncate(ct_scan, minCutoff, -600)
+    #ct_scan=(ct_scan-(minCutoff))/400 #abs(minCutoff) # normalise HU
+    minCutoff = -1000
+    ct_scan=truncate(ct_scan, minCutoff, 600)
+    ct_scan=(ct_scan-(minCutoff)) / 1600 # normalise HU
+
+    return ct_scan[np.newaxis, :], seg_mask[np.newaxis, :]
 

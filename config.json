@@ -7,6 +7,7 @@
         "masks" : "/data/alc5/data/segmentations/cropped/airways",
         "labelled_list" : "/data/alc5/data/segmentations/cropped/airways",
         "test_scans" : "/data/jw144/project/medicalImages/SouthamptonData/H02-DICOM/*B40F/",
+	//"test_scans" : "/home/josh/3DSlicer/project/rat_repo_UoE/rat_seg_smoothed.mhd",
         "output_id" : "southamptonH02",
         "unseen_masks": "/data/alc5/data/testData/segmentations",
         "unseen_scans": "/data/alc5/data/testData/scans"
@@ -28,14 +29,12 @@
     },
    "segment3d" :
     {
-        "scan_size" : [160,160,160],
         "n_classes" : 2,
         "crop_fraction": 0.3,
-        "downsample" : [5, 5, 10]
-        "downsampling_on" : t
+        "downsample" : [1, 1, 1],
+        "downsampling_on" : "n",
+        "num_boxes" : 8, // number of boxes in sliding window approach
     },
-
-
 
   "train2d" :
     {

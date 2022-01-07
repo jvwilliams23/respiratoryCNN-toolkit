@@ -7,6 +7,8 @@ import vtk
 import vedo as v
 from skimage.measure import label
 
+def npToInts(arr):
+  return [int(a) for a in arr]
 
 # Not sure if works for all format (Tested only on mhd/zraw format)
 def load_itk(filename):
@@ -149,6 +151,7 @@ def getLargestIsland(segmentation):
   labels = label(segmentation)
   assert labels.max() != 0  # assume at least 1 CC
   largestIsland = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
+  del labels
   return largestIsland
 
 

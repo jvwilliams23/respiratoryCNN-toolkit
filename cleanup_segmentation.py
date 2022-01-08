@@ -23,7 +23,7 @@ bounding box is [  0   0   0 444 355  90]
 """
 
 MESH_FILE_NAME = "seg_mm_airway.vtk"
-MESH_SMOOTHING_ITERATIONS = 1000
+MESH_SMOOTHING_ITERATIONS = 2000
 fig_dir = "debug/"
 
 
@@ -196,15 +196,28 @@ del seg_repadded_arr, region_growing_obj_arr, region_growing_obj
 combined_vol = sitk.GetImageFromArray(combined_vol_arr)
 combined_vol.CopyInformation(seg_repadded)
 del combined_vol_arr
+# apply small dilation as the mesh will be eroded by surface smoothing
+# combined_vol = binary_dilate(combined_vol, kernel_radius=1)
 # only keep voxels connected to upper airway seed (remove all noise from border)
 region_growing_combined_vol = sitk.ConnectedThreshold(
   combined_vol, seedList=seed_list_new, lower=1.0, upper=1.0
+)
+# crop to reduce memory requirements, then upsample so we get smooth surface
+region_growing_combined_vol = u.rg_based_crop(region_growing_combined_vol)
+region_growing_combined_vol = u.resampleImage(
+  region_growing_combined_vol,
+  interpolator=sitk.sitkNearestNeighbor,
+  downsampling_ratio=0.5,
+)
+print(
+  f"resampled size {region_growing_combined_vol.GetSize()} -",
+  f"spacing {region_growing_combined_vol.GetSpacing()}",
 )
 region_growing_combined_vol_arr = sitk.GetArrayFromImage(
   region_growing_combined_vol
 )
 print("sum is", region_growing_combined_vol_arr.sum())
-sitk.WriteImage(region_growing_combined_vol, "region-grow-union.mhd")
+# sitk.WriteImage(region_growing_combined_vol, "region-grow-union.mhd")
 assert (region_growing_combined_vol_arr.sum() != 0) and (
   region_growing_combined_vol_arr.sum() != region_growing_combined_vol_arr.size
 ), "segmentation is empty"
@@ -213,8 +226,8 @@ del region_growing_combined_vol, combined_vol
 print("converting arr to vol")
 # write region-growing segmentation to surface file
 vol = v.Volume(
-  np.pad(region_growing_combined_vol_arr, 1), # pad to ensure closed surface
-  spacing=seg_repadded.GetSpacing()
+  np.pad(region_growing_combined_vol_arr, 1),  # pad to ensure closed surface
+  spacing=seg_repadded.GetSpacing(),
 )
 del region_growing_combined_vol_arr
 print("vol to isosurface")
@@ -224,8 +237,7 @@ v.write(mesh, MESH_FILE_NAME)
 
 # perform smoothing on output surface file and over-write non-smooth version
 surfs = pv.read(MESH_FILE_NAME)
-print('smoothing')
+print("smoothing")
 surfs = surfs.smooth(n_iter=int(MESH_SMOOTHING_ITERATIONS))
-print('saving', MESH_FILE_NAME)
+print("saving", MESH_FILE_NAME)
 surfs.save(MESH_FILE_NAME)
-

@@ -18,6 +18,33 @@ def load_itk(filename):
   spacing = np.array(list(reversed(itkimage.GetSpacing())))
   return ct_scan, origin, spacing
 
+def rg_based_crop(image):
+  """
+  Use a connected-threshold estimator to separate background and foreground.
+  Then crop the image using the foreground's axis aligned bounding box.
+  Parameters
+  ----------
+  image (SimpleITK image): An image where the anatomy and background intensities form a bi-modal distribution
+                               (the assumption underlying Otsu's method.)
+  Return
+  ------
+  Cropped image based on foreground's axis aligned bounding box.
+  """
+  # Set pixels that are in [min_intensity,otsu_threshold] to inside_value, values above otsu_threshold are
+  # set to outside_value. The anatomy has higher intensity values than the background, so it is outside.
+
+  label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
+  label_shape_filter.Execute(image)
+  bounding_box = label_shape_filter.GetBoundingBox(
+    1
+  )  # -1 due to binary nature of threshold
+  # -The bounding box's first "dim" entries are the starting index and last "dim" entries the size
+  roi = sitk.RegionOfInterest(
+    image,
+    bounding_box[int(len(bounding_box) / 2) :],
+    bounding_box[0 : int(len(bounding_box) / 2)],
+  )
+  return roi
 
 def lossTang2019(logits, labels, label, eps=1e-7, gamma=5.0):
   """
@@ -159,6 +186,90 @@ def numpy_to_surface(arr, spacing=[1, 1, 1], origin=[0, 0, 0]):
   vol = v.Volume(arr, spacing=spacing, origin=origin)
   return vol.isosurface(largest=True)
 
+def resampleImage(imageIn, interpolator=sitk.sitkLinear, **kwargs):
+  """
+  Resamples image to improve quality and make isotropically spaced.
+  Inputs:
+          SimpleITK Image; to be scaled, by a chosen factor.
+          seedToChange;    a list of coordinates of a seed that may be influenced by any change in
+                           slice index.
+          voxel_size;         a float value to set new spacing to.
+  """
+  # -Euler transform to get extreme points to resample image
+  euler3d = sitk.Euler3DTransform()
+  euler3d.SetCenter(
+    imageIn.TransformContinuousIndexToPhysicalPoint(
+      np.array(imageIn.GetSize()) / 2.0
+    )
+  )
+  tx = 0
+  ty = 0
+  tz = 0
+  euler3d.SetTranslation((tx, ty, tz))
+  extreme_points = [
+    imageIn.TransformIndexToPhysicalPoint((0, 0, 0)),
+    imageIn.TransformIndexToPhysicalPoint((imageIn.GetWidth(), 0, 0)),
+    imageIn.TransformIndexToPhysicalPoint(
+      (imageIn.GetWidth(), imageIn.GetHeight(), 0)
+    ),
+    imageIn.TransformIndexToPhysicalPoint(
+      (imageIn.GetWidth(), imageIn.GetHeight(), imageIn.GetDepth())
+    ),
+    imageIn.TransformIndexToPhysicalPoint(
+      (imageIn.GetWidth(), 0, imageIn.GetDepth())
+    ),
+    imageIn.TransformIndexToPhysicalPoint(
+      (0, imageIn.GetHeight(), imageIn.GetDepth())
+    ),
+    imageIn.TransformIndexToPhysicalPoint((0, 0, imageIn.GetDepth())),
+    imageIn.TransformIndexToPhysicalPoint((0, imageIn.GetHeight(), 0)),
+  ]
+  inv_euler3d = euler3d.GetInverse()
+  extreme_points_transformed = [
+    inv_euler3d.TransformPoint(pnt) for pnt in extreme_points
+  ]
+
+  min_x = min(extreme_points_transformed)[0]
+  min_y = min(extreme_points_transformed, key=lambda p: p[1])[1]
+  min_z = min(extreme_points_transformed, key=lambda p: p[2])[2]
+  max_x = max(extreme_points_transformed)[0]
+  max_y = max(extreme_points_transformed, key=lambda p: p[1])[1]
+  max_z = max(extreme_points_transformed, key=lambda p: p[2])[2]
+  # Use the original spacing (arbitrary decision).
+  input_spacing = imageIn.GetSpacing()
+  # print(output_spacing)
+  if "downsampling_ratio" in kwargs.keys():
+    output_spacing = np.array(input_spacing) * np.array(
+      kwargs["downsampling_ratio"]
+    )
+    print(f"downsampling to {output_spacing}")
+  elif "voxel_size" in kwargs.keys():
+    voxel_size = kwargs["voxel_size"]
+    if type(voxel_size) != float:
+      output_spacing = voxel_size
+    else:
+      output_spacing = (voxel_size, voxel_size, voxel_size)
+  # Identity cosine matrix (arbitrary decision).
+  output_direction = imageIn.GetDirection()
+  # Minimal x,y coordinates are the new origin.
+  output_origin = imageIn.GetOrigin()
+  # Compute grid size based on the physical size and spacing.
+  output_size = [
+    int((max_x - min_x) / output_spacing[0]),
+    int((max_y - min_y) / output_spacing[1]),
+    int((max_z - min_z) / output_spacing[2]),
+  ]
+  resampled_image = sitk.Resample(
+    imageIn,
+    output_size,
+    euler3d,
+    interpolator,
+    output_origin,
+    output_spacing,
+    output_direction,
+  )
+
+  return resampled_image
 
 def binaryLabelToSTL(image, outputName="newairway.stl"):
   """

@@ -8,7 +8,7 @@ from math import floor, ceil
 from copy import copy
 from skimage import morphology
 from skimage.measure import label, regionprops
-from . import utils
+from . import utils as u
 import vedo as v
 
 
@@ -241,93 +241,6 @@ def getLargestIsland(segmentation):
     largestIsland = sitk.GetImageFromArray(largestIsland)
   return largestIsland
 
-
-def resampleImage(imageIn, interpolator=sitk.sitkLinear, **kwargs):
-  """
-  Resamples image to improve quality and make isotropically spaced.
-  Inputs:
-          SimpleITK Image; to be scaled, by a chosen factor.
-          seedToChange;    a list of coordinates of a seed that may be influenced by any change in
-                           slice index.
-          voxel_size;         a float value to set new spacing to.
-  """
-  # -Euler transform to get extreme points to resample image
-  euler3d = sitk.Euler3DTransform()
-  euler3d.SetCenter(
-    imageIn.TransformContinuousIndexToPhysicalPoint(
-      np.array(imageIn.GetSize()) / 2.0
-    )
-  )
-  tx = 0
-  ty = 0
-  tz = 0
-  euler3d.SetTranslation((tx, ty, tz))
-  extreme_points = [
-    imageIn.TransformIndexToPhysicalPoint((0, 0, 0)),
-    imageIn.TransformIndexToPhysicalPoint((imageIn.GetWidth(), 0, 0)),
-    imageIn.TransformIndexToPhysicalPoint(
-      (imageIn.GetWidth(), imageIn.GetHeight(), 0)
-    ),
-    imageIn.TransformIndexToPhysicalPoint(
-      (imageIn.GetWidth(), imageIn.GetHeight(), imageIn.GetDepth())
-    ),
-    imageIn.TransformIndexToPhysicalPoint(
-      (imageIn.GetWidth(), 0, imageIn.GetDepth())
-    ),
-    imageIn.TransformIndexToPhysicalPoint(
-      (0, imageIn.GetHeight(), imageIn.GetDepth())
-    ),
-    imageIn.TransformIndexToPhysicalPoint((0, 0, imageIn.GetDepth())),
-    imageIn.TransformIndexToPhysicalPoint((0, imageIn.GetHeight(), 0)),
-  ]
-  inv_euler3d = euler3d.GetInverse()
-  extreme_points_transformed = [
-    inv_euler3d.TransformPoint(pnt) for pnt in extreme_points
-  ]
-
-  min_x = min(extreme_points_transformed)[0]
-  min_y = min(extreme_points_transformed, key=lambda p: p[1])[1]
-  min_z = min(extreme_points_transformed, key=lambda p: p[2])[2]
-  max_x = max(extreme_points_transformed)[0]
-  max_y = max(extreme_points_transformed, key=lambda p: p[1])[1]
-  max_z = max(extreme_points_transformed, key=lambda p: p[2])[2]
-  # Use the original spacing (arbitrary decision).
-  input_spacing = imageIn.GetSpacing()
-  # print(output_spacing)
-  if "downsampling_ratio" in kwargs.keys():
-    output_spacing = np.array(input_spacing) * np.array(
-      kwargs["downsampling_ratio"]
-    )
-    print(f"downsampling to {output_spacing}")
-  elif "voxel_size" in kwargs.keys():
-    voxel_size = kwargs["voxel_size"]
-    if type(voxel_size) != float:
-      output_spacing = voxel_size
-    else:
-      output_spacing = (voxel_size, voxel_size, voxel_size)
-  # Identity cosine matrix (arbitrary decision).
-  output_direction = imageIn.GetDirection()
-  # Minimal x,y coordinates are the new origin.
-  output_origin = imageIn.GetOrigin()
-  # Compute grid size based on the physical size and spacing.
-  output_size = [
-    int((max_x - min_x) / output_spacing[0]),
-    int((max_y - min_y) / output_spacing[1]),
-    int((max_z - min_z) / output_spacing[2]),
-  ]
-  resampled_image = sitk.Resample(
-    imageIn,
-    output_size,
-    euler3d,
-    interpolator,
-    output_origin,
-    output_spacing,
-    output_direction,
-  )
-
-  return resampled_image
-
-
 class SegmentSet(data.Dataset):
   """
   list_scans is a list containing the filenames of scans
@@ -375,7 +288,7 @@ class SegmentSet(data.Dataset):
     ct_scanOrig = pad.Execute(ct_scanOrig)
     # ct_scan=sitk.GetImageFromArray(ct_scan)
     if self.downsample:
-      ct_scanOrig = resampleImage(ct_scanOrig, **self.kwargs)
+      ct_scanOrig = u.resampleImage(ct_scanOrig, **self.kwargs)
       print(f"downsampled image size is {ct_scanOrig.GetSize()}")
     # ct_scan=sitk.GetArrayFromImage(ct_scan)
     # ct_halfs, ct_scanOrig = rg_based_crop_for_cnn(ct_scanOrig)

@@ -162,8 +162,8 @@ aug_iters = config["train3d"]["aug_iters"]
 model.train()
 best_val_loss = 1e16
 for epoch in range(epochs):
-  if epoch > 30:
-    stop_training()
+  '''if epoch > 30:
+    stop_training()'''
   epoch_loss = 0
   for i in range(0, len(train_data)+aug_iters, batch_size):
     losses = torch.ones(config["train3d"]["n_classes"])

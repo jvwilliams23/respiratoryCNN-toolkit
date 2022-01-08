@@ -30,7 +30,7 @@
         // number of classes (2 = foreground + background)
         "n_classes" : 2,
         // number of artificial/augmented datasets to create in training
-        "aug_iters" : 500,
+        "aug_iters" : 3000,
         /* focal loss parameter for controlling loss 
             contribution from hard examples
         */

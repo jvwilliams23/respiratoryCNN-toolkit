@@ -20,7 +20,6 @@
       "start_filters" : 32,
       "scan_size" : [160,160,160],
       "train_size" : 40,
-      "validation_steps" : 10,
       "validation_size" : 10,
       "n_classes" : 2,
       "aug_iters" : 50,
@@ -29,7 +28,8 @@
    "segment3d" :
     {
       "scan_size" : [160,160,160],
-      "n_classes" : 2
+      "n_classes" : 2,
+      "crop_fraction": 0.3
     },
 
 

@@ -1,5 +1,8 @@
 import numpy as np
-import pickle, nrrd, json, os
+import pickle
+import nrrd 
+import hjson
+import os
 import torch
 import SimpleITK as sitk
 from data.seg_dataset import resampleImage
@@ -16,7 +19,7 @@ import model
 from data import *
 
 with open("config.json") as f:
-  config = json.load(f)
+  config = hjson.load(f)
 
 device = torch.device("cpu")
 
@@ -43,7 +46,7 @@ unet.load_state_dict(torch.load("./model.pt"))
 writeNRRDlib = False
 writeSITK = True
 for i in range(len(list_scans)):
-    dataset = seg_dataset.SegmentSet(list_scans[i], list_scans[i], mode="3d", scan_size=config["train3d"]["scan_size"])
+    dataset = seg_dataset.SegmentSet(list_scans[i], list_scans[i], mode="3d", scan_size=config["train3d"]["scan_size"], crop_fraction=config['segment3d']['crop_fraction'])
     segID = str(list_scans[i].replace(".mhd", ""))[-4:]
     if 'EXACT09' in list_scans[i]:
         segID = 'CASE'+list_scans[i].split('CASE')[1][:2]
@@ -72,7 +75,9 @@ for i in range(len(list_scans)):
         segmentation[l] = np.swapaxes(segmentation[l], 1, 0)
         print("-"*30, "Upsampling label map", label)
         segmentation[l] = sitk.GetImageFromArray(segmentation[l])
-        segmentation[l] = resampleImage(segmentation[l], X_orig.GetSize(), interpolator=sitk.sitkNearestNeighbor)
+        segmentation[l] = resampleImage(segmentation[l], 
+                                        X_orig.GetSize(), 
+                                        interpolator=sitk.sitkNearestNeighbor)
         # get metadata from original ct dataset
         segmentation[l].SetOrigin(X_orig.GetOrigin())
         segmentation[l].SetSpacing(X_orig.GetSpacing())

@@ -82,6 +82,7 @@ for i in range(len(list_scans)):
   segmentation = [None] * len([1])
   for l, label in enumerate([1]):
     segmentation[l] = utils.getLargestIsland(labelMap == label)
+    #segmentation[l] = (labelMap == label)
     # change shape to correct orientation for comparing with ground truths
     segmentation[l] = sitk.GetImageFromArray(
       np.array(segmentation[l], dtype=np.int8)
@@ -118,7 +119,7 @@ for i in range(len(list_scans)):
       origin=X_orig.GetOrigin(),
       spacing=X_orig.GetSpacing(),
     )
-    v.write(mesh, f"segmentations/{segID}_mm_airway.stl")
+    v.write(mesh, f"segmentations/{segID}_mm_airway.vtk")
 
 # spacing = [str(X_orig.GetSpacing()[0]), str(X_orig.GetSpacing()[1]), str(X_orig.GetSpacing()[2])]
 # centre =  ['"'+str(X_orig.GetOrigin()[0])+'"', '"'+str(X_orig.GetOrigin()[1])+'"', '"'+str(X_orig.GetOrigin()[2])+'"']

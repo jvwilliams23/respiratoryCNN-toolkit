@@ -128,9 +128,9 @@ for i in range(len(list_scans)):
   image_out.SetSpacing(spacing)
   image_out.SetOrigin(origin_list[0])
   print("Writing labelMap to mhd")
-  """sitk.WriteImage(
+  sitk.WriteImage(
     image_out, "./segmentations/seg-{0}-{1}.mhd".format(segID, "airway")
-  )"""
+  )
   print("numpy to volume")
   vol = v.Volume(combined_vol, spacing=spacing)
   # mesh = vol.isosurface()#largest=True)

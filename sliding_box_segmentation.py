@@ -77,39 +77,53 @@ for i in range(len(list_scans)):
     lower_list,
     mid_point_list,
     upper_list,
+    bounding_box_to_tissue,
+    bounding_box_to_lobes,
   ) = dataset.__getitem__(i)
+  # save bounding boxes to be used in cleanup
+  np.savetxt(
+    f"bounding_box_to_tissue-{segID}.txt",
+    bounding_box_to_tissue,
+    header="xmin, ymin, zmin, xsize, ysize, zsize",
+  )
+  np.savetxt(
+    f"bounding_box_to_lobes-{segID}.txt",
+    bounding_box_to_lobes,
+    header="xmin, ymin, zmin, xsize, ysize, zsize",
+  )
   labelMap_windows = [None] * len(input_windows)
   for w, window in enumerate(input_windows):
-    window = torch.Tensor(np.array([window[np.newaxis,:].astype(np.float16)])).to(device)  # scan
+    window = torch.Tensor(
+      np.array([window[np.newaxis, :].astype(np.float16)])
+    ).to(
+      device
+    )  # scan
     print("-" * 30, "Getting probabilities")
     logits = unet(window)
     print("-" * 30, "Getting label map")
     labelMap_windows[w] = torch.max(logits[0], 0)[1].numpy()
     del logits
-    # labelMap_windows[w] = np.swapaxes(labelMap_windows[w], 0, 2)
   vol_list = []
   box_size = (upper_list[0] - lower_list[0]) // 2
   print(f"box size is {box_size}")
   combined_vol = copy(labelMap_windows[0])
-  for j, (window, origin) in enumerate(zip(labelMap_windows[1:], origin_list[1:])):
+  for j, (window, origin) in enumerate(
+    zip(labelMap_windows[1:], origin_list[1:])
+  ):
     print(
       j,
       mid_point_list[j],
       window[:, :, :box_size].shape,
       combined_vol[:, :, mid_point_list[j] :].shape,
     )
-    # Calculate intersection of two windows of a binary labelmap 
-    #combined_vol[:, :, mid_point_list[j] :] *= window[:, :, :box_size]
     # Calculate union of two windows of a binary label map
     combined_vol[:, :, mid_point_list[j] :] += window[:, :, :box_size]
-    combined_vol[:, :, mid_point_list[j] :] = np.where(combined_vol[:, :, mid_point_list[j] :] >= 1, 1, 0)
-    print(
-      "\t", combined_vol.shape[-1], window[:, :, box_size:].shape[-1]
+    combined_vol[:, :, mid_point_list[j] :] = np.where(
+      combined_vol[:, :, mid_point_list[j] :] >= 1, 1, 0
     )
+    print("\t", combined_vol.shape[-1], window[:, :, box_size:].shape[-1])
     combined_vol = np.dstack((combined_vol, window[:, :, box_size:]))
     print("\t", combined_vol.shape[-1])
-    # vol_list.append(v.Volume(window.T, spacing=spacing, origin=origin))
-  # outputs = vol_list[0].append(vol_list[1:])
   image_out = sitk.GetImageFromArray(combined_vol)
   image_out.SetSpacing(spacing)
   image_out.SetOrigin(origin_list[0])
@@ -119,60 +133,7 @@ for i in range(len(list_scans)):
   )"""
   print("numpy to volume")
   vol = v.Volume(combined_vol, spacing=spacing)
-  #mesh = vol.isosurface()#largest=True)
+  # mesh = vol.isosurface()#largest=True)
   mesh = vol.isosurface(largest=True)
   print("Writing vtk surface mesh")
   v.write(mesh, f"{segID}_mm_airway.vtk")
-  # format data to be read by NN
-  """
-  labelMap_windows = [None] * len(input_windows)
-  for h, half in enumerate(input_windows):
-    half = torch.Tensor(np.array([half.astype(np.float16)])).to(device)  # scan
-    print("-" * 30, "Getting probabilities")
-    logits = unet(half)
-    print("-" * 30, "Getting label map")
-    labelMap_half[h] = torch.max(logits[0], 0)[1].numpy()
-    labelMap_half[h] = np.swapaxes(labelMap_half[h], 0, 2)
-  labelMap = np.dstack(labelMap_half)
-  print("-" * 30, "Getting largest island for each label")
-  segmentation = [None] * len([1])
-  for l, label in enumerate([1]):
-    segmentation[l] = utils.getLargestIsland(labelMap == label)
-    #segmentation[l] = (labelMap == label)
-    # change shape to correct orientation for comparing with ground truths
-    segmentation[l] = sitk.GetImageFromArray(
-      np.array(segmentation[l], dtype=np.int8)
-    )
-    segmentation[l] = sitk.GetArrayFromImage(segmentation[l])
-    segmentation[l] = np.swapaxes(segmentation[l], 1, 2)
-    segmentation[l] = np.swapaxes(segmentation[l], 0, 2)
-    segmentation[l] = np.swapaxes(segmentation[l], 1, 0)
-    print("-" * 30, "Upsampling label map", label)
-    segmentation[l] = sitk.GetImageFromArray(segmentation[l])
-    segmentation[l] = resampleImage(
-      segmentation[l], X_orig.GetSize(), interpolator=sitk.sitkNearestNeighbor
-    )
-    # get metadata from original ct dataset
-    segmentation[l].SetOrigin(X_orig.GetOrigin())
-    segmentation[l].SetSpacing(X_orig.GetSpacing())
-    # add extra layer of voxels to make closed surface
-    pad = sitk.ConstantPadImageFilter()
-    pad.SetPadLowerBound((1, 1, 1))
-    pad.SetPadUpperBound((1, 1, 1))
-    pad.SetConstant(0)
-    segmentation[l] = pad.Execute(segmentation[l])
-    print("-" * 30, "Writing label map", label)
-    # output data
-    mesh = utils.numpy_to_surface(
-      sitk.GetArrayFromImage(segmentation[l]),
-      origin=X_orig.GetOrigin(),
-      spacing=spacing,
-    )
-    v.write(mesh, f"segmentations/{segID}_mm_airway.vtk")
-  """
-
-
-# spacing = [str(X_orig.GetSpacing()[0]), str(X_orig.GetSpacing()[1]), str(X_orig.GetSpacing()[2])]
-# centre =  ['"'+str(X_orig.GetOrigin()[0])+'"', '"'+str(X_orig.GetOrigin()[1])+'"', '"'+str(X_orig.GetOrigin()[2])+'"']
-# header = {'kinds': ['domain', 'domain', 'domain'], 'units': ['mm', 'mm', 'mm'], 'spacings': spacing, 'space': 'right-anterior-superior', 'centerings':centre}
-# nrrd.write("mask3D_segBin.nrrd", labelArr, header, compression_level=9)

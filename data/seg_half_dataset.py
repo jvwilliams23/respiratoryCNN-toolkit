@@ -18,18 +18,20 @@ def truncate(image, min_bound, max_bound):
   return image
 
 def visualise_bb(arr, spacing, origin):
-  return v.Volume(arr, origin=origin, spacing=spacing).legosurface(vmin=0.5, vmax=1)
+  return v.Volume(arr, origin=origin, spacing=spacing).legosurface(
+    vmin=0.5, vmax=1
+  )
 
 def numpy_to_ints(arr):
-    return [int(arr[0]), int(arr[1]), int(arr[2])]
+  return [int(arr[0]), int(arr[1]), int(arr[2])]
 
 def is_integer(n):
   try:
-      float(n)
+    float(n)
   except ValueError:
-      return False
+    return False
   else:
-      return float(n).is_integer()
+    return float(n).is_integer()
 
 def sliding_window_crop(image, num_boxes=5, crop_dir=2, overlap=2):
   """
@@ -44,8 +46,8 @@ def sliding_window_crop(image, num_boxes=5, crop_dir=2, overlap=2):
   Cropped image based on foreground's axis aligned bounding box.
   """
   image_arr = sitk.GetArrayFromImage(image).T
-  spacing = np.array(image.GetSpacing())#[::-1]
-  origin = np.array(image.GetOrigin())#[::-1]
+  spacing = np.array(image.GetSpacing())  # [::-1]
+  origin = np.array(image.GetOrigin())  # [::-1]
   lower_floor = False
   mid_floor = False
   upper_floor = False
@@ -57,8 +59,8 @@ def sliding_window_crop(image, num_boxes=5, crop_dir=2, overlap=2):
   # label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
   # label_shape_filter.Execute(image_island)
   # bounding_box = np.array(label_shape_filter.GetBoundingBox(1))
-  max_size = list(image.GetSize())#[::-1]
-  bounding_box = [0,0,0] + max_size
+  max_size = list(image.GetSize())  # [::-1]
+  bounding_box = [0, 0, 0] + max_size
   bounding_box = np.array(bounding_box)
   roi_list = []
   # vp += v.Volume(sitk.GetArrayFromImage(image))
@@ -66,7 +68,9 @@ def sliding_window_crop(image, num_boxes=5, crop_dir=2, overlap=2):
   # vp.show()
   # exit()
   print("sitk image shape", image.GetSize())
-  print(f"np array shape {image_arr.shape}, min {image_arr.min()}, max {image_arr.max()}")
+  print(
+    f"np array shape {image_arr.shape}, min {image_arr.min()}, max {image_arr.max()}"
+  )
 
   bb_lower = bounding_box[0 : int(len(bounding_box) / 2)].T
   bb_upper = bounding_box[int(len(bounding_box) / 2) :].T
@@ -74,14 +78,18 @@ def sliding_window_crop(image, num_boxes=5, crop_dir=2, overlap=2):
   bb_mid = bb_upper // 2
 
   # roi_i = image_arr[bb_lower[2]:bb_upper[2], bb_lower[1]:bb_upper[1], bb_lower[0]:bb_upper[0]]
-  roi_i = image_arr[bb_lower[0]:bb_upper[0], bb_lower[1]:bb_upper[1], bb_lower[2]:bb_upper[2]]
+  roi_i = image_arr[
+    bb_lower[0] : bb_upper[0],
+    bb_lower[1] : bb_upper[1],
+    bb_lower[2] : bb_upper[2],
+  ]
   roi_list.append(roi_i)
   vol = copy(roi_i)
   # vp = v.Plotter()
   # vp += visualise_bb(vol, spacing, origin=origin)
   # check bounds of box are OK
   print(f"bounding box is {bounding_box}")
-  print() 
+  print()
   print(f"lower : {bb_lower}. \t upper : {bb_upper}")
   # use alternating combination of ceil and floor to make spacing consistent
   if not is_integer(bb_lower[crop_dir]):
@@ -116,7 +124,7 @@ def sliding_window_crop(image, num_boxes=5, crop_dir=2, overlap=2):
 
   # for box in range((num_boxes*2)-2):
   # for box in range(int(round(num_boxes*1.5))):
-  for i in range((num_boxes*overlap) - (1 * overlap)):
+  for i in range((num_boxes * overlap) - (1 * overlap)):
     bb_lower[crop_dir] += box_size / overlap
     bb_mid[crop_dir] += box_size / overlap
     bb_upper[crop_dir] += box_size / overlap
@@ -147,13 +155,21 @@ def sliding_window_crop(image, num_boxes=5, crop_dir=2, overlap=2):
     if bb_upper[crop_dir] > max_size[crop_dir]:
       break
     # unsure why origin[crop_dir] gives weird results ...
-    origin[crop_dir] = origin_def[crop_dir] + (bb_lower[crop_dir]*spacing[crop_dir])
+    origin[crop_dir] = origin_def[crop_dir] + (
+      bb_lower[crop_dir] * spacing[crop_dir]
+    )
     origin_list.append(copy(origin))
     # get bounding box as xstart, ystart, zstart, xsize, ysize, zsize
-    roi_i = image_arr[bb_lower[0]:bb_upper[0], bb_lower[1]:bb_upper[1], bb_lower[2]:bb_upper[2]]
- 
+    roi_i = image_arr[
+      bb_lower[0] : bb_upper[0],
+      bb_lower[1] : bb_upper[1],
+      bb_lower[2] : bb_upper[2],
+    ]
+
     # check bounds of box are OK
-    print(f"lower : {bb_lower}. \t middle : {bb_mid} \t upper : {bb_upper}, size = {bb_upper[crop_dir]-bb_lower[crop_dir]}")
+    print(
+      f"lower : {bb_lower}. \t middle : {bb_mid} \t upper : {bb_upper}, size = {bb_upper[crop_dir]-bb_lower[crop_dir]}"
+    )
 
     roi_list.append(roi_i)
     vol = copy(roi_i)
@@ -208,17 +224,19 @@ def rg_based_crop_for_cnn(image):
   label_shape_filter.Execute(image_island)
   # get bounding box as xmin, ymin, zmin, xmax, ymax, zmax
   # get bounding box as xstart, ystart, zstart, xsize, ysize, zsize
-  bounding_box = list(
+  bounding_box_to_lobes = list(
     label_shape_filter.GetBoundingBox(1)
   )  # -1 due to binary nature of threshold
 
   # crop to lobes
   roi_to_lobes = sitk.RegionOfInterest(
     roi,
-    bounding_box[int(len(bounding_box) / 2) :],
-    bounding_box[0 : int(len(bounding_box) / 2)],
+    bounding_box_to_lobes[int(len(bounding_box) / 2) :],
+    bounding_box_to_lobes[0 : int(len(bounding_box) / 2)],
   )
-  return roi_to_lobes
+  print("bb 1 :", bounding_box)
+  print("bb to lobes  :", bounding_box_to_lobes)
+  return roi_to_lobes, bounding_box, bounding_box_to_lobes
 
 
 def getLargestIsland(segmentation):
@@ -240,6 +258,7 @@ def getLargestIsland(segmentation):
   if seg_sitk:
     largestIsland = sitk.GetImageFromArray(largestIsland)
   return largestIsland
+
 
 class SegmentSet(data.Dataset):
   """
@@ -277,10 +296,14 @@ class SegmentSet(data.Dataset):
     else:
       ct_scanOrig = sitk.ReadImage(path)
 
-    ct_scanOrig = rg_based_crop_for_cnn(ct_scanOrig)
+    (
+      ct_scanOrig,
+      bounding_box_to_tissue,
+      bounding_box_to_lobes,
+    ) = rg_based_crop_for_cnn(ct_scanOrig)
     num_z_slices = ct_scanOrig.GetSize()[2]
     num_z_ceil_100 = int(ceil(num_z_slices / 100)) * 100
-    num_z_to_pad = num_z_ceil_100 - num_z_slices -1
+    num_z_to_pad = num_z_ceil_100 - num_z_slices - 1
     pad = sitk.ConstantPadImageFilter()
     pad.SetPadLowerBound((1, 1, 1))
     pad.SetPadUpperBound((1, 1, num_z_to_pad))
@@ -299,6 +322,20 @@ class SegmentSet(data.Dataset):
     #   half = truncate(half, minCutoff, 600)
     #   half = (half - (minCutoff)) / 1600  # normalise HU
     #   out_halfs[i] = half[np.newaxis, :]
-    roi_list, origin_list, lower_list, mid_point_list, upper_list = sliding_window_crop(ct_scanOrig, self.kwargs["num_boxes"])
-    return roi_list, origin_list, ct_scanOrig.GetSpacing(), lower_list, mid_point_list, upper_list
-
+    (
+      roi_list,
+      origin_list,
+      lower_list,
+      mid_point_list,
+      upper_list,
+    ) = sliding_window_crop(ct_scanOrig, self.kwargs["num_boxes"])
+    return (
+      roi_list,
+      origin_list,
+      ct_scanOrig.GetSpacing(),
+      lower_list,
+      mid_point_list,
+      upper_list,
+      bounding_box_to_tissue,
+      bounding_box_to_lobes,
+    )

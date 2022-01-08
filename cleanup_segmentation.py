@@ -18,13 +18,12 @@ writeID is southamptonH04
 bb 1 : (0, 41, 0, 512, 411, 963)
 bb to lobes  : [36, 0, 67, 442, 353, 845]
 sitk image shape (444, 355, 900)
-np array shape (444, 355, 900), min -1024, max 3071
-bounding box is [  0   0   0 444 355  90]
 """
 
 MESH_FILE_NAME = "seg_mm_airway.vtk"
 MESH_SMOOTHING_ITERATIONS = 2000
 fig_dir = "debug/"
+segID = "southamptonH04"
 
 
 def copy_info_from_transposed_image(image, image_with_info_to_copy):
@@ -89,9 +88,12 @@ seg = copy(seg_orig)
 original_size = np.array(img.GetSize())
 seg_original_size = np.array(seg.GetSize())
 # get bounding-boxes used at each stage of cropping
-bb_to_tissue = np.array([0, 41, 0, 512, 411, 963])
-bb_to_lobes = np.array([36, 0, 67, 442, 353, 845])
-output_img_shape = np.array([444, 355, 900])  # hard-coded for development
+# bb_to_tissue = np.array([0, 41, 0, 512, 411, 963])
+bb_to_tissue = np.loadtxt(f"bounding_box_to_tissue-{segID}.txt")
+# bb_to_lobes = np.array([36, 0, 67, 442, 353, 845])
+bb_to_lobes = np.loadtxt(f"bounding_box_to_lobes-{segID}.txt")
+# output_img_shape = np.array([444, 355, 900])  # hard-coded for development
+output_img_shape = np.array(seg.GetSize())
 
 lhs_padding = bb_to_lobes[:3] + bb_to_tissue[:3]
 rhs_padding = original_size - (bb_to_lobes[3:] + lhs_padding)

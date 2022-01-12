@@ -22,7 +22,7 @@ from data import utils as u
 import userUtils as utils
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('-i','--inp', "-s", "--segmentation"
+parser.add_argument('-i','--inp', "-s", "--segmentation",
                     default='segmentations/seg-southamptonH04-airway.mhd', 
                     type=str, 
                     help='input segmentation directory'

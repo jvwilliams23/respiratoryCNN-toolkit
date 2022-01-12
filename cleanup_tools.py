@@ -1,8 +1,10 @@
+import argparse
 from copy import copy
 from glob import glob
 from sys import exit
 
 import numpy as np
+import hjson
 import pyvista as pv
 import SimpleITK as sitk
 from skimage import morphology, transform, filters
@@ -18,6 +20,14 @@ import vedo as v
 from data import seg_half_dataset
 from data import utils as u
 import userUtils as utils
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('-i','--inp', "-s", "--segmentation"
+                    default='segmentations/seg-southamptonH04-airway.mhd', 
+                    type=str, 
+                    help='input segmentation directory'
+                    )
+args = parser.parse_args()
 
 
 class CleanupTools:
@@ -256,8 +266,10 @@ class CleanupTools:
 
 
 if __name__ == "__main__":
+  with open("config.json") as f:
+    config = hjson.load(f)
   z_ind = 0
-  path = glob("images/H04-DICOM/*/")[0]
+  path = config["path"]["test_scans"]
   series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(path)
   series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(
     path, series_IDs[0]
@@ -268,7 +280,7 @@ if __name__ == "__main__":
   series_reader.MetaDataDictionaryArrayUpdateOn()
   img = series_reader.Execute()  # -Get images
 
-  seg_orig = sitk.ReadImage("segmentations/seg-southamptonH04-airway.mhd")
+  seg_orig = sitk.ReadImage(args.inp)
 
   # seg_orig = sitk.ReadImage("../seg_data/seg-southamptonA01-nocrop-airway.mhd")
   # image axes are saved as z,y,x by accident, so we fix this here
@@ -282,7 +294,8 @@ if __name__ == "__main__":
   print("new")
   print(seg_new.GetSize(), seg_new.GetSpacing())
 
-  ctools = CleanupTools(img, seg_new, "southamptonH04")
+  seg_id = config["path"]["output_id"]
+  ctools = CleanupTools(img, seg_new, seg_id)
   (
     combined_vol,
     seg_repadded,
@@ -293,11 +306,11 @@ if __name__ == "__main__":
   print(f"spacing combined_vol {combined_vol.GetSpacing()}")
   del ctools
   mesh = CleanupTools.image_to_mesh(combined_vol)
-  v.write(mesh, "newclean-combinedH04.vtk")
+  v.write(mesh, f"newclean-combined{seg_id}.vtk")
   del mesh, combined_vol
   mesh = CleanupTools.image_to_mesh(seg_repadded)
-  v.write(mesh, "newclean-unetH04.vtk")
+  v.write(mesh, f"newclean-unet{seg_id}.vtk")
   del mesh, seg_repadded
   mesh = CleanupTools.image_to_mesh(region_grown_seg)
-  v.write(mesh, "newclean-regiongrowH04.vtk")
+  v.write(mesh, f"newclean-regiongrow{seg_id}.vtk")
   del mesh, region_grown_seg

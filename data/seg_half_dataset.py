@@ -246,9 +246,10 @@ def getLargestIsland(segmentation):
   """
   if type(segmentation) == sitk.Image:
     seg_sitk = True
-    segmentation = sitk.GetArrayFromImage(segmentation).astype(np.int16)
+    labels = label(sitk.GetArrayFromImage(segmentation).astype(np.int16)).astype(np.int16)  # -get connected component
+  else:
+    labels = label(segmentation).astype(np.int16)  # -get connected component
 
-  labels = label(segmentation).astype(np.int16)  # -get connected component
   assert labels.max() != 0  # assume at least 1 connected component
   # -get largest connected region (converts from True/False to 1/0)
   largestIsland = np.array(
@@ -257,6 +258,7 @@ def getLargestIsland(segmentation):
   # -if sitk.Image input, return type sitk.Image
   if seg_sitk:
     largestIsland = sitk.GetImageFromArray(largestIsland)
+    largestIsland.CopyInformation(segmentation)
   return largestIsland
 
 

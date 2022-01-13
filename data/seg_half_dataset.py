@@ -298,11 +298,17 @@ class SegmentSet(data.Dataset):
     else:
       ct_scanOrig = sitk.ReadImage(path)
 
-    (
-      ct_scanOrig,
-      bounding_box_to_tissue,
-      bounding_box_to_lobes,
-    ) = rg_based_crop_for_cnn(ct_scanOrig)
+    if "crop_to_lobes" in self.kwargs.keys():
+        (
+          ct_scanOrig,
+          bounding_box_to_tissue,
+          bounding_box_to_lobes,
+        ) = rg_based_crop_for_cnn(ct_scanOrig)
+    else:
+        bb_default = list(np.zeros(3)) + list(ct_scanOrig.GetSize())
+        bounding_box_to_tissue = bb_default
+        bounding_box_to_lobes = bb_default
+
     num_z_slices = ct_scanOrig.GetSize()[2]
     num_z_ceil_100 = int(ceil(num_z_slices / 100)) * 100
     num_z_to_pad = num_z_ceil_100 - num_z_slices - 1

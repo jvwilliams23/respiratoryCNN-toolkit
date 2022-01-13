@@ -70,8 +70,12 @@ unet.load_state_dict(torch.load("./model.pt"))
 writeNRRDlib = False
 writeSITK = True
 kwargs = {}
+crop_to_lobes = bool(strtobool(config["segment3d"]["crop_to_lobes"][0]))
+if crop_to_lobes:
+  kwargs["crop_to_lobes"] = crop_to_lobes
+
 for i in range(len(list_scans)):
-  downsampling_on = strtobool(config["segment3d"]["downsampling_on"][0])
+  downsampling_on = bool(strtobool(config["segment3d"]["downsampling_on"][0]))
   if downsampling_on:
     downsampling_ratio = config["segment3d"]["downsample"]
     kwargs["downsampling_ratio"] = downsampling_ratio

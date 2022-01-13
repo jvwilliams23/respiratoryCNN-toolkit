@@ -73,6 +73,15 @@ kwargs = {}
 crop_to_lobes = bool(strtobool(config["segment3d"]["crop_to_lobes"][0]))
 if crop_to_lobes:
   kwargs["crop_to_lobes"] = crop_to_lobes
+  print(f"Reading lobes file {config['segment3d']['lobes_dir']}")
+  lobes_file = glob(config["segment3d"]["lobes_dir"])[0]
+  print(f"glob finds: {glob(config['segment3d']['lobes_dir'])}")
+  #kwargs["lobe_seg"] = config["segment3d"]["lobes_dir"]
+  lobes_seg = sitk.ReadImage(lobes_file)
+  lobes_arr = sitk.GetArrayFromImage(lobes_seg)
+  lungs_arr = np.where(lobes_arr != 0, 1, 0)
+  kwargs["lobe_seg"] = sitk.GetImageFromArray(lungs_arr)
+  del lungs_arr, lobes_seg, lobes_arr
 
 for i in range(len(list_scans)):
   downsampling_on = bool(strtobool(config["segment3d"]["downsampling_on"][0]))
@@ -143,6 +152,8 @@ for i in range(len(list_scans)):
     print("\t", combined_vol.shape[-1], window[:, :, box_size:].shape[-1])
     combined_vol = np.dstack((combined_vol, window[:, :, box_size:]))
     print("\t", combined_vol.shape[-1])
+  # so image axial direction is z-dir in sitk image
+  combined_vol = combined_vol.T
   image_out = sitk.GetImageFromArray(combined_vol)
   image_out.SetSpacing(spacing)
   image_out.SetOrigin(origin_list[0])

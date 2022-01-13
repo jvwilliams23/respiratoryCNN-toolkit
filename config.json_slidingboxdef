@@ -37,6 +37,7 @@
         "downsampling_on" : "n",
         "num_boxes" : 10, // number of boxes in sliding window approach
         "crop_to_lobes" : "n",
+        "lobes_dir" : "/home/jw144/project/imaging/lung-lobe-UNetCNN/images/southamptonCASEID*/luna16*CASEID*.mhd",
     },
 
   "train2d" :

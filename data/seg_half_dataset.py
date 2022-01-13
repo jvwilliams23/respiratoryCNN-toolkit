@@ -238,6 +238,34 @@ def rg_based_crop_for_cnn(image):
   print("bb to lobes  :", bounding_box_to_lobes)
   return roi_to_lobes, bounding_box, bounding_box_to_lobes
 
+def rg_based_crop_to_pre_segmented_lobes(image, seg):
+  """
+  Use a pre-computed lobe segmentation to crop image before segmentation
+  Parameters
+  ----------
+  image (SimpleITK image): A CT image
+  seg (SimpleITK image): A binary labelmap of the lung hull
+  Return
+  ------
+  Cropp
+  """
+  bounding_box_to_tissue = [0, 0, 0] + list(image.GetSize())
+  label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
+  label_shape_filter.Execute(seg)
+  bounding_box_to_lobes = label_shape_filter.GetBoundingBox(
+    1
+  )  # -1 due to binary nature of threshold
+  # -The bounding box's first "dim" entries are the starting index and last "dim" entries the size
+  roi = sitk.RegionOfInterest(
+    image,
+    bounding_box_to_lobes[int(len(bounding_box_to_lobes) / 2) :],
+    bounding_box_to_lobes[0 : int(len(bounding_box_to_lobes) / 2)],
+  )
+  print("bb 1 :", bounding_box_to_tissue)
+  print("bb to lobes  :", bounding_box_to_lobes)
+  print("roi size is", roi.GetSize())
+  return roi, bounding_box_to_tissue, bounding_box_to_lobes
+
 
 def getLargestIsland(segmentation):
   """
@@ -303,11 +331,22 @@ class SegmentSet(data.Dataset):
       ct_scanOrig = sitk.ReadImage(path)
 
     if "crop_to_lobes" in self.kwargs.keys():
+        """
         (
           ct_scanOrig,
           bounding_box_to_tissue,
           bounding_box_to_lobes,
         ) = rg_based_crop_for_cnn(ct_scanOrig)
+        """
+        assert np.all(np.array(ct_scanOrig.GetSize()) == np.array(self.kwargs["lobe_seg"].GetSize())), (
+          "shape of img and segmentation do not match "
+          f"{ct_scanOrig.GetSize()} != {self.kwargs['lobe_seg'].GetSize()}"
+        )
+        (
+          ct_scanOrig,
+          bounding_box_to_tissue,
+          bounding_box_to_lobes,
+        ) = rg_based_crop_to_pre_segmented_lobes(ct_scanOrig, self.kwargs["lobe_seg"])
     else:
         bb_default = list(np.zeros(3)) + list(ct_scanOrig.GetSize())
         bounding_box_to_tissue = bb_default

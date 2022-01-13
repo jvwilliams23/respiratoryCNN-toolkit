@@ -2,7 +2,7 @@
 Split image in half with plane in X-direction. Segment each half with UNet then merge outputs
 
 """
-
+import argparse
 import numpy as np
 import pickle
 import nrrd
@@ -29,10 +29,25 @@ from data import *
 with open("config.json") as f:
   config = hjson.load(f)
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument(
+  "-bd",
+  "--bounding_box_dir",
+  default="bounding_boxes/",
+  type=str,
+  help="Directory to save bounding boxes",
+)
+
+args = parser.parse_args()
+
+
 device = torch.device("cpu")
 
 if len(glob("segmentations/")) == 0:
   mkdir("segmentations")
+
+if len(glob(args.bounding_box_dir)) == 0:
+  mkdir(args.bounding_box_dir)
 
 # list_scans = glob(config["path"]["test_scans"])
 list_scans = glob(config["path"]["test_scans"])  # -Lists all .mhd scans.
@@ -82,12 +97,12 @@ for i in range(len(list_scans)):
   ) = dataset.__getitem__(i)
   # save bounding boxes to be used in cleanup
   np.savetxt(
-    f"bounding_box_to_tissue-{segID}.txt",
+    f"{args.bounding_box_dir}/bounding_box_to_tissue-{segID}.txt",
     bounding_box_to_tissue,
     header="xmin, ymin, zmin, xsize, ysize, zsize",
   )
   np.savetxt(
-    f"bounding_box_to_lobes-{segID}.txt",
+    f"{args.bounding_box_dir}/bounding_box_to_lobes-{segID}.txt",
     bounding_box_to_lobes,
     header="xmin, ymin, zmin, xsize, ysize, zsize",
   )

@@ -22,19 +22,43 @@ from data import utils as u
 import userUtils as utils
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('-i','--inp', "-s", "--segmentation",
-                    default='segmentations/seg-southamptonH04-airway.mhd', 
-                    type=str, 
-                    help='input segmentation directory'
-                    )
+parser.add_argument(
+  "-i",
+  "--inp",
+  "-s",
+  "--segmentation",
+  default="segmentations/seg-southamptonH04-airway.mhd",
+  type=str,
+  help="input segmentation directory",
+)
+parser.add_argument(
+  "-bd",
+  "--bounding_box_dir",
+  default="bounding_boxes/",
+  type=str,
+  help="Directory to save bounding boxes",
+)
+
 args = parser.parse_args()
 
 
 class CleanupTools:
-  def __init__(self, ct_original, segmentation, segID, z_ind=0, **kwargs):
+  def __init__(
+    self,
+    ct_original,
+    segmentation,
+    segID,
+    bb_to_lobes,
+    bb_to_tissue,
+    z_ind=0,
+    **kwargs,
+  ):
     self.ct_original = ct_original
     self.segmentation = segmentation
     self.segID = segID
+    self.bb_to_lobes = bb_to_lobes
+    self.bb_to_tissue = bb_to_tissue
+
     self.kwargs = kwargs
     self._ORIGINAL_SIZE = np.array(ct_original.GetSize())
 
@@ -97,14 +121,14 @@ class CleanupTools:
     seg_original_size = np.array(segmentation.GetSize())
     # get bounding-boxes used at each stage of cropping
     """ TODO need more pythonic way to get bounding boxes """
-    bb_to_tissue = np.loadtxt(f"bounding_box_to_tissue-{self.segID}.txt")
-    bb_to_lobes = np.loadtxt(f"bounding_box_to_lobes-{self.segID}.txt")
     output_img_shape = np.array(segmentation.GetSize())
 
-    lhs_padding = bb_to_lobes[:3] + bb_to_tissue[:3]
-    rhs_padding = self._ORIGINAL_SIZE - (bb_to_lobes[3:] + lhs_padding)
+    lhs_padding = self.bb_to_lobes[:3] + self.bb_to_tissue[:3]
+    rhs_padding = self._ORIGINAL_SIZE - (self.bb_to_lobes[3:] + lhs_padding)
     rhs_padding_orig = rhs_padding.copy()
-    rhs_padding[2] -= np.ceil(bb_to_lobes[-1] / 100) * 100 - bb_to_lobes[-1]
+    rhs_padding[2] -= (
+      np.ceil(self.bb_to_lobes[-1] / 100) * 100 - self.bb_to_lobes[-1]
+    )
     # rhs_padding = original_size - (output_img_shape + lhs_padding)
     """
     During sliding box segmentation, we round the number of voxels in z-dir to 
@@ -119,7 +143,7 @@ class CleanupTools:
       # and we subtract 2 from output img shape to account for an extra 1 layer pad
       bounding_box_to_crop = [1, 1, 1] + list(output_img_shape - 2)[:-1]
       # add zsize to cropping bounding box list
-      bounding_box_to_crop.extend([bb_to_lobes[-1] + rhs_padding[2]])
+      bounding_box_to_crop.extend([self.bb_to_lobes[-1] + rhs_padding[2]])
       bounding_box_to_crop = u.npToInts(bounding_box_to_crop)
       segmentation = sitk.RegionOfInterest(
         segmentation,
@@ -269,7 +293,8 @@ if __name__ == "__main__":
   with open("config.json") as f:
     config = hjson.load(f)
   z_ind = 0
-  path = config["path"]["test_scans"]
+  path = glob(config["path"]["test_scans"])[0]
+  print(path)
   series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(path)
   series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(
     path, series_IDs[0]
@@ -295,11 +320,20 @@ if __name__ == "__main__":
   print(seg_new.GetSize(), seg_new.GetSpacing())
 
   seg_id = config["path"]["output_id"]
+  bb_to_tissue = np.loadtxt(
+    f"{args.bounding_box_dir}/bounding_box_to_tissue-{seg_id}.txt"
+  )
+  bb_to_lobes = np.loadtxt(
+    f"{args.bounding_box_dir}/bounding_box_to_lobes-{seg_id}.txt"
+  )
+
   ctools = CleanupTools(img, seg_new, seg_id)
   (
     combined_vol,
     seg_repadded,
     region_grown_seg,
+    bb_to_lobes,
+    bb_to_tissue,
   ) = ctools.cleanup_cropped_segmentation(img, seg_new)
   print(f"spacing region_grown {region_grown_seg.GetSpacing()}")
   print(f"spacing seg_repadded {seg_repadded.GetSpacing()}")

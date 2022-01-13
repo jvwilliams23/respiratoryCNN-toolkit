@@ -1,3 +1,11 @@
+"""
+Pipeline for cleaning up U-Net segmentation.
+Includes, cropping to reduce noise near edge of image. 
+Performs region-growing to extract upper airways.
+
+@author: Josh Williams
+"""
+
 import argparse
 from copy import copy
 from glob import glob
@@ -9,12 +17,11 @@ import pyvista as pv
 import SimpleITK as sitk
 from skimage import morphology, transform, filters
 from skimage.measure import label, regionprops
-from scipy.spatial.transform import Rotation as R
-import skan
-from scipy.ndimage import rotate
-import scipy.sparse.csgraph as scigraph
-import networkx as nx
-import networkx.algorithms.approximation.clique as clique
+
+# import skan
+# import scipy.sparse.csgraph as scigraph
+# import networkx as nx
+# import networkx.algorithms.approximation.clique as clique
 import vedo as v
 
 from data import seg_half_dataset
@@ -62,14 +69,17 @@ class CleanupTools:
     self.kwargs = kwargs
     self._ORIGINAL_SIZE = np.array(ct_original.GetSize())
 
-  def cleanup_cropped_segmentation(self, ct_original, segmentation, **kwargs):
-    seg_padded = self._repad_cropped_segmentation(segmentation)  # **kwargs)
+  def cleanup_cropped_segmentation_with_region_growing(
+    self, ct_original, segmentation, **kwargs
+  ):
+    seg_padded = self._repad_cropped_segmentation(segmentation)
     seg_cropped, bounding_box = self._crop_edges(seg_padded)
     seg_cropped = seg_half_dataset.getLargestIsland(seg_cropped)
-    # del seg_padded
+    del seg_padded
     seg_repadded = self._repad_cropped_segmentation_post(
       seg_cropped, bounding_box
     )
+    del seg_cropped
     region_grown_seg = self.regiongrowing_upper_airways(
       ct_original, seg_repadded
     )
@@ -77,6 +87,16 @@ class CleanupTools:
       seg_repadded, region_grown_seg
     )
     return combined_vol, seg_repadded, region_grown_seg
+
+  def cleanup_cropped_segmentation(self, ct_original, segmentation, **kwargs):
+    seg_padded = self._repad_cropped_segmentation(segmentation)
+    seg_cropped, bounding_box = self._crop_edges(seg_padded)
+    seg_cropped = seg_half_dataset.getLargestIsland(seg_cropped)
+    # del seg_padded
+    seg_repadded = self._repad_cropped_segmentation_post(
+      seg_cropped, bounding_box
+    )
+    return seg_repadded
 
   def regiongrowing_upper_airways(self, image, segmentation):
     assert image.GetSize() == segmentation.GetSize(), (
@@ -290,11 +310,13 @@ class CleanupTools:
 
 
 if __name__ == "__main__":
-  with open("config.json") as f:
+  with open("devconfig.json") as f:
     config = hjson.load(f)
+
   z_ind = 0
   path = glob(config["path"]["test_scans"])[0]
   print(path)
+
   series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(path)
   series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(
     path, series_IDs[0]
@@ -307,7 +329,6 @@ if __name__ == "__main__":
 
   seg_orig = sitk.ReadImage(args.inp)
 
-  # seg_orig = sitk.ReadImage("../seg_data/seg-southamptonA01-nocrop-airway.mhd")
   # image axes are saved as z,y,x by accident, so we fix this here
   seg_new_arr = sitk.GetArrayFromImage(seg_orig).T
   seg_new = sitk.GetImageFromArray(seg_new_arr)
@@ -327,24 +348,25 @@ if __name__ == "__main__":
     f"{args.bounding_box_dir}/bounding_box_to_lobes-{seg_id}.txt"
   )
 
-  ctools = CleanupTools(img, seg_new, seg_id)
+  ctools = CleanupTools(img, seg_new, seg_id, bb_to_lobes, bb_to_lobes)
+  del seg_new_arr, img, seg_new
+  """ """
   (
     combined_vol,
     seg_repadded,
     region_grown_seg,
-    bb_to_lobes,
-    bb_to_tissue,
-  ) = ctools.cleanup_cropped_segmentation(img, seg_new)
+  ) = ctools.cleanup_cropped_segmentation_with_region_growing(
+    ctools.ct_original, ctools.segmentation
+  )
+
   print(f"spacing region_grown {region_grown_seg.GetSpacing()}")
   print(f"spacing seg_repadded {seg_repadded.GetSpacing()}")
   print(f"spacing combined_vol {combined_vol.GetSpacing()}")
+
   del ctools
   mesh = CleanupTools.image_to_mesh(combined_vol)
   v.write(mesh, f"newclean-combined{seg_id}.vtk")
   del mesh, combined_vol
-  mesh = CleanupTools.image_to_mesh(seg_repadded)
-  v.write(mesh, f"newclean-unet{seg_id}.vtk")
-  del mesh, seg_repadded
   mesh = CleanupTools.image_to_mesh(region_grown_seg)
   v.write(mesh, f"newclean-regiongrow{seg_id}.vtk")
   del mesh, region_grown_seg

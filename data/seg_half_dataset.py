@@ -252,14 +252,18 @@ def getLargestIsland(segmentation):
 
   assert labels.max() != 0  # assume at least 1 connected component
   # -get largest connected region (converts from True/False to 1/0)
-  largestIsland = np.array(
+  largestIsland_arr = np.array(
     labels == np.argmax(np.bincount(labels.flat)[1:]) + 1, dtype=np.int8
   )
+  del labels
   # -if sitk.Image input, return type sitk.Image
   if seg_sitk:
-    largestIsland = sitk.GetImageFromArray(largestIsland)
+    largestIsland = sitk.GetImageFromArray(largestIsland_arr)
+    del largestIsland_arr
     largestIsland.CopyInformation(segmentation)
-  return largestIsland
+    return largestIsland
+  else:
+    return largestIsland_arr
 
 
 class SegmentSet(data.Dataset):

@@ -130,19 +130,12 @@ class Dataset(data.Dataset):
       seg_mask[seg_mask >  1] = 0
       
   
-    ct_scan=sitk.GetImageFromArray(ct_scan)
-    seg_mask=sitk.GetImageFromArray(seg_mask)
+    #ct_scan=sitk.GetImageFromArray(ct_scan)
+    #seg_mask=sitk.GetImageFromArray(seg_mask)
     #ct_scan=resampleImage(ct_scan, self.scan_size)	#changed to remove downsampling
     #seg_mask=resampleImage(seg_mask, self.scan_size) #changed to remove downsampling
-    ct_scan=sitk.GetArrayFromImage(ct_scan)
-    seg_mask=sitk.GetArrayFromImage(seg_mask)
-    if np.min(ct_scan.ravel()) < -1100:
-      minCutoff = np.partition(np.unique(ct_scan.ravel()),2)[1]
-    else:
-      minCutoff=np.min(ct_scan.ravel())
-    #minCutoff = -1000
-    #ct_scan=truncate(ct_scan, minCutoff, -600)
-    #ct_scan=(ct_scan-(minCutoff))/400 #abs(minCutoff) # normalise HU
+    #ct_scan=sitk.GetArrayFromImage(ct_scan)
+    #seg_mask=sitk.GetArrayFromImage(seg_mask)
     minCutoff = -1000
     ct_scan=truncate(ct_scan, minCutoff, 600)
     ct_scan=(ct_scan-(minCutoff)) / 1600 # normalise HU

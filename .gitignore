@@ -10,3 +10,5 @@ config.jsonDef_*
 log*
 old*
 *txt
+bounding_boxes/
+*tgz

@@ -77,41 +77,20 @@ class Dataset(data.Dataset):
     list_scans is a list containing the filenames of scans
     scans_path and masks_path are the paths of the folders containing the data
   """
-  def __init__(self, list_scans, scans_path, masks_path, scan_size = [128, 128, 128], n_classes = 5):
-    self.list_scans = list_scans
+  def __init__(self, scans_path, labels_path, scan_size = [128, 128, 128], n_classes = 5):
     self.scans_path = scans_path
-    self.masks_path = masks_path
+    self.labels_path = labels_path
     self.scan_size = scan_size
     self.n_classes = n_classes
 
   def __len__(self):
-    return len(self.list_scans)
+    return len(self.scans_path)
 
   def __getitem__(self, index):
 
-    scan = self.list_scans[index]
-
     #load scan and mask
-    #path = os.path.join(self.scans_path, scan, '*', '*') ----- Original
-    path = self.scans_path
-    #scan_dicom_id = os.path.basename(glob(path)[0])   # used to find the corresponding lung mask ----- Original
-    scan_dicom_id = scan[-8:-4]
-    #nrrd_scan = nrrd.read(glob(os.path.join(path, "*CT.nrrd"))[0])   # tuple containing the CT scan and some metadata ----- Original
-    #nrrd_scan = nrrd.read(glob(os.path.join(self.masks_path, scan_dicom_id + "*.nrrd"))[0])#-Load the LUNA16 ground truth scans. This worked, somehow.
-    #seg_mask = np.swapaxes(nrrd_scan[0], 0, 2)
-    print(str(self.masks_path)+str(scan_dicom_id)+ "*.nrrd")
-    nrrd_scan = sitk.ReadImage(glob(os.path.join(self.masks_path, scan_dicom_id + "*.nrrd"))[0])
-    #ct_scan = np.swapaxes(nrrd_scan[0], 0, 2) # JW 02/07/20
-    if nrrd_scan.GetDepth()==0:
-        print("read error: dataset.py")
-        sys.exit(0)
-    seg_space = nrrd_scan.GetSpacing()
-    seg_orig = nrrd_scan.GetOrigin()
-    seg_mask = sitk.GetArrayFromImage(nrrd_scan)
-    #seg_mask = np.swapaxes(nrrd_scan[0], 0, 2)
-    #seg_mask, _, _ = utils.load_itk(os.path.join(self.scans_path, scan_dicom_id + ".mhd"))# JW 02/07/19
-    ct_scan, ct_orig, ct_space = utils.load_itk(glob(os.path.join(self.scans_path, "*" + scan_dicom_id + ".mhd"))[0])# function uses SimpleITK to load lung masks from mhd/zraw data
-
+    ct_scan, ct_orig, ct_space = utils.load_itk(self.scans_path[index])
+    seg_mask, seg_orig, seg_space = utils.load_itk(self.labels_path[index])
 
     if self.n_classes == 5 or self.n_classes == 6:
       seg_mask[seg_mask == 0] = 0
@@ -122,20 +101,11 @@ class Dataset(data.Dataset):
       seg_mask[seg_mask == 7] = 4
       seg_mask[seg_mask == 8] = 5
       seg_mask[seg_mask > 8] = 0
-
-
     else:
       seg_mask[seg_mask <= 0] = 0
       seg_mask[seg_mask == 1] = 1
       seg_mask[seg_mask >  1] = 0
       
-  
-    #ct_scan=sitk.GetImageFromArray(ct_scan)
-    #seg_mask=sitk.GetImageFromArray(seg_mask)
-    #ct_scan=resampleImage(ct_scan, self.scan_size)	#changed to remove downsampling
-    #seg_mask=resampleImage(seg_mask, self.scan_size) #changed to remove downsampling
-    #ct_scan=sitk.GetArrayFromImage(ct_scan)
-    #seg_mask=sitk.GetArrayFromImage(seg_mask)
     minCutoff = -1000
     ct_scan=truncate(ct_scan, minCutoff, 600)
     ct_scan=(ct_scan-(minCutoff)) / 1600 # normalise HU

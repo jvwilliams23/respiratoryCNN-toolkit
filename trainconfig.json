@@ -12,7 +12,7 @@
     "train3d" :
     {
         // which model to use in training (UNet or ENet)
-        "model" : "ENet",
+        "model" : "UNet",
         // max number of iterations
         "epochs" : 300,
         // number of samples trained on at once
@@ -30,7 +30,7 @@
         // number of classes (2 = foreground + background)
         "n_classes" : 2,
         // number of artificial/augmented datasets to create in training
-        "aug_iters" : 3000,
+        "aug_iters" : 25,
         /* focal loss parameter for controlling loss 
             contribution from hard examples
         */

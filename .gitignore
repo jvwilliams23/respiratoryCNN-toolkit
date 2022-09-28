@@ -5,3 +5,8 @@ exact09*Segs.sh
 *.o1*
 *.po1*
 config.jsonDef_*
+*vtk
+*stl
+log*
+old*
+*txt

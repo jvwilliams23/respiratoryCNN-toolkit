@@ -6,14 +6,14 @@
       "scans" : "/data/alc5/data/scans/cropped/airways",
       "masks" : "/data/alc5/data/segmentations/cropped/airways",
       "labelled_list" : "/data/alc5/data/segmentations/cropped/airways",
-      "test_scans" : "/data/jw144/project/medicalImages/EXACT09/Testing/CASEID/",
+      "test_scans" : "/data/jw144/project/medicalImages/LUNA16/CT/*CASEID.mhd",
       "unseen_masks": "/data/alc5/data/testData/segmentations",
       "unseen_scans": "/data/alc5/data/testData/scans"
     },
 
   "train3d" :
     {
-      "model" : "ENet",
+      "model" : "UNet",
       "epochs" : 300,
       "batch_size" : 1,
       "lr" : 1e-4,

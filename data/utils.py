@@ -10,6 +10,33 @@ from skimage.measure import label
 import numpy as np
 import torch
 
+def convert_text_to_filenames(file_string):
+  """
+  read a tabular txt file formatted as follows:
+    /path/to/image1 /path/to/label1
+    /path/to/image2 /path/to/label2
+ 
+  Output
+  ------
+  image_names (list of str): all strings with path to image
+  label_names (list of str): all strings with path to label
+  """
+  with open(file_string, "r") as f:
+    all_cases = f.readlines()
+
+  image_file_list = []
+  label_file_list = []
+  for case_row in all_cases:
+    removed_newline = case_row.replace("\n", "")
+    # print(removed_newline)
+    # check if string is empty (meaning no line in file)
+    if removed_newline.__eq__(""):
+      continue
+    image_file_list.append(removed_newline.split()[0])
+    label_file_list.append(removed_newline.split()[1])
+  return image_file_list, label_file_list
+
+
 class EarlyStopping:
     """Early stops the training if validation loss doesn't improve after a given patience."""
     def __init__(self, patience=7, verbose=False, delta=0, path='checkpoint.pt', trace_func=print):
@@ -231,12 +258,24 @@ def compute_dice_coefficient_np(mask_pred, mask_gt):
 
   return torch.mean(1 - torch.from_numpy(dice))
 
+def extract_largest_island(segmentation):
+  """Take binary segmentation, as sitk.Image or np.ndarray, and return largest
+  connected 'island'."""
+  seg_sitk = False
+  if type(segmentation) == sitk.Image:
+    seg_sitk = True
+    # logger.info("extract_largest_island, changing sitk.Image to array")
+    segmentation = sitk.GetArrayFromImage(segmentation).astype(np.int16)
 
-def getLargestIsland(segmentation):
-  labels = label(segmentation)
-  assert labels.max() != 0  # assume at least 1 CC
-  largestIsland = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
-  del labels
+  labels = label(segmentation).astype(np.int8)  # -get connected component
+  assert labels.max() != 0  # assume at least 1 connected component
+  # -get largest connected region (converts from True/False to 1/0)
+  largestIsland = np.array(
+    labels == np.argmax(np.bincount(labels.flat)[1:]) + 1, dtype=np.int8
+  )
+  # -if sitk.Image input, return type sitk.Image
+  if seg_sitk:
+    largestIsland = sitk.GetImageFromArray(largestIsland)
   return largestIsland
 
 

@@ -26,7 +26,7 @@ import vedo as v
 
 from data import seg_half_dataset
 from data import utils as u
-import userUtils as utils
+#import userUtils as utils
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -310,7 +310,7 @@ class CleanupTools:
 
 
 if __name__ == "__main__":
-  with open("devconfig.json") as f:
+  with open("config.json") as f:
     config = hjson.load(f)
 
   z_ind = 0
@@ -358,6 +358,7 @@ if __name__ == "__main__":
   ) = ctools.cleanup_cropped_segmentation_with_region_growing(
     ctools.ct_original, ctools.segmentation
   )
+  sitk.WriteImage(combined_vol, f"segmentations/seg-cleanedUNet-{seg_id}.mhd")
 
   print(f"spacing region_grown {region_grown_seg.GetSpacing()}")
   print(f"spacing seg_repadded {seg_repadded.GetSpacing()}")

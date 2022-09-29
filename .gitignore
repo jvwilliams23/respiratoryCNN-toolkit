@@ -1,4 +1,5 @@
 __pycache__/
+*/__pycache__/
 run*.cmd
 segmentations/
 exact09*Segs.sh

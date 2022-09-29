@@ -308,14 +308,14 @@ class SegmentSet(data.Dataset):
   def __len__(self):
     return len(self.scans_path)
 
-  def __getitem__(self, index):
+  def __getitem__(self):
 
     # load scan and mask
-    series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(self.scans_path[index])
     sitk.ProcessObject_SetGlobalWarningDisplay(False)
+    series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(self.scans_path)
     if series_IDs:  # -Sanity check
       series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(
-        self.scans_path[index], series_IDs[0]
+        self.scans_path, series_IDs[0]
       )
       series_reader = sitk.ImageSeriesReader()
       series_reader.SetFileNames(series_file_names)
@@ -323,7 +323,7 @@ class SegmentSet(data.Dataset):
       series_reader.MetaDataDictionaryArrayUpdateOn()
       ct_scanOrig = series_reader.Execute()  # -Get images
     else:
-      ct_scanOrig = sitk.ReadImage(self.scans_path[index])
+      ct_scanOrig = sitk.ReadImage(self.scans_path)
     sitk.ProcessObject_SetGlobalWarningDisplay(True)
 
     if "crop_to_lobes" in self.kwargs.keys():
@@ -360,15 +360,7 @@ class SegmentSet(data.Dataset):
     if self.downsample:
       ct_scanOrig = u.resampleImage(ct_scanOrig, **self.kwargs)
       print(f"downsampled image size is {ct_scanOrig.GetSize()}")
-    # ct_scan=sitk.GetArrayFromImage(ct_scan)
-    # ct_halfs, ct_scanOrig = rg_based_crop_for_cnn(ct_scanOrig)
-    # out_halfs = [None] * len(ct_halfs)
-    # for i, half in enumerate(ct_halfs):
     #   half = sitk.GetArrayFromImage(half)
-    #   minCutoff = -1000
-    #   half = truncate(half, minCutoff, 600)
-    #   half = (half - (minCutoff)) / 1600  # normalise HU
-    #   out_halfs[i] = half[np.newaxis, :]
     (
       roi_list,
       origin_list,
@@ -376,6 +368,11 @@ class SegmentSet(data.Dataset):
       mid_point_list,
       upper_list,
     ) = sliding_window_crop(ct_scanOrig, self.kwargs["num_boxes"])
+    for i, roi_i in enumerate(roi_list):
+      minCutoff = -1000
+      roi_i = truncate(roi_i, minCutoff, 600)
+      roi_i = (roi_i - (minCutoff)) / 1600  # normalise HU
+      roi_list[i] = roi_i
     return (
       roi_list,
       origin_list,

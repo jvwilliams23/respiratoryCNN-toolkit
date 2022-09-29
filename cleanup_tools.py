@@ -26,27 +26,27 @@ import vedo as v
 
 from data import seg_half_dataset
 from data import utils as u
-#import userUtils as utils
 
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument(
-  "-i",
-  "--inp",
-  "-s",
-  "--segmentation",
-  default="segmentations/seg-southamptonH04-airway.mhd",
-  type=str,
-  help="input segmentation directory",
-)
-parser.add_argument(
-  "-bd",
-  "--bounding_box_dir",
-  default="bounding_boxes/",
-  type=str,
-  help="Directory to save bounding boxes",
-)
+def inputs():
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument(
+    "-i",
+    "--inp",
+    "-s",
+    "--segmentation",
+    default="segmentations/seg-southamptonH04-airway.mhd",
+    type=str,
+    help="input segmentation directory",
+  )
+  parser.add_argument(
+    "-bd",
+    "--bounding_box_dir",
+    default="bounding_boxes/",
+    type=str,
+    help="Directory to save bounding boxes",
+  )
+  return parser.parse_args()
 
-args = parser.parse_args()
 
 
 class CleanupTools:
@@ -310,7 +310,8 @@ class CleanupTools:
 
 
 if __name__ == "__main__":
-  with open("config.json") as f:
+  args = inputs()
+  with open("devconfig.json") as f:
     config = hjson.load(f)
 
   z_ind = 0
@@ -358,7 +359,6 @@ if __name__ == "__main__":
   ) = ctools.cleanup_cropped_segmentation_with_region_growing(
     ctools.ct_original, ctools.segmentation
   )
-  sitk.WriteImage(combined_vol, f"segmentations/seg-cleanedUNet-{seg_id}.mhd")
 
   print(f"spacing region_grown {region_grown_seg.GetSpacing()}")
   print(f"spacing seg_repadded {seg_repadded.GetSpacing()}")

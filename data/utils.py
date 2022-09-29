@@ -278,10 +278,9 @@ def extract_largest_island(segmentation):
     largestIsland = sitk.GetImageFromArray(largestIsland)
   return largestIsland
 
-
-def numpy_to_surface(arr, spacing=[1, 1, 1], origin=[0, 0, 0]):
+def numpy_to_surface(arr, spacing=[1, 1, 1], origin=[0, 0, 0], largest=True):
   vol = v.Volume(arr, spacing=spacing, origin=origin)
-  return vol.isosurface(largest=True)
+  return vol.isosurface(largest=largest)
 
 def resampleImage(imageIn, interpolator=sitk.sitkLinear, **kwargs):
   """

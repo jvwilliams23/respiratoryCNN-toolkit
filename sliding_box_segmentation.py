@@ -24,7 +24,7 @@ from data import *
 with open("config.json") as f:
   config = hjson.load(f)
 
-def inputs():
+def get_inputs():
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument(
     "-i",
@@ -34,15 +34,29 @@ def inputs():
     help="input image to segment /path/to/ct/*.mhd or /path/to/dicom/",
   )
   parser.add_argument(
+    "-wd",
+    "--write_dir",
+    default="../segmentations/",
+    type=str,
+    help="output segmentation directory /path/to/segmentations/",
+  )
+  parser.add_argument(
     "-bd",
     "--bounding_box_dir",
     default="bounding_boxes/",
     type=str,
     help="Directory to save bounding boxes",
   )
+  parser.add_argument(
+    "-large",
+    "--largest_only",
+    default=False,
+    action="store_true",
+    help="Keep the largest connected component in the domain",
+  )
   return parser.parse_args()
 
-args = inputs()
+args = get_inputs()
 
 device = torch.device("cpu")
 
@@ -78,7 +92,7 @@ if downsampling_on:
 kwargs["num_boxes"] = config["segment3d"]["num_boxes"]
 
 dataset = seg_half_dataset.SegmentSet(
-  [args.ct_path], downsample=downsampling_on, **kwargs
+  args.ct_path, downsample=downsampling_on, **kwargs
 )
 segID = config["path"]["output_id"]
 print("writeID is", segID)
@@ -92,7 +106,7 @@ print("writeID is", segID)
   upper_list,
   bounding_box_to_tissue,
   bounding_box_to_lobes,
-) = dataset.__getitem__(i)
+) = dataset.__getitem__()
 # save bounding boxes to be used in cleanup
 np.savetxt(
   f"{args.bounding_box_dir}/bounding_box_to_tissue-{segID}.txt",
@@ -137,16 +151,14 @@ for j, (window, origin) in enumerate(
   print("\t", combined_vol.shape[-1])
 # so image axial direction is z-dir in sitk image
 combined_vol = combined_vol.T
+if args.largest_only:
+  combined_vol = utils.extract_largest_island(combined_vol)
 image_out = sitk.GetImageFromArray(combined_vol)
 image_out.SetSpacing(spacing)
 image_out.SetOrigin(origin_list[0])
 print("Writing labelMap to mhd")
-sitk.WriteImage(
-  image_out, "./segmentations/seg-{0}-{1}.mhd".format(segID, "airway")
-)
+sitk.WriteImage(image_out, f"{args.write_dir}/seg-{segID}-airway.mhd")
 print("numpy to volume")
-vol = v.Volume(combined_vol, spacing=spacing)
-mesh = vol.isosurface()#largest=True)
-#mesh = vol.isosurface(largest=True)
+mesh = utils.numpy_to_surface(combined_vol, spacing=spacing, origin=origin_list[0], largest=args.largest_only)
 print("Writing vtk surface mesh")
-v.write(mesh, f"{segID}_mm_airway.vtk")
+v.write(mesh, f"{args.write_dir}/{segID}_mm_airway.vtk")

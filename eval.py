@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 import hjson as json
 import os
@@ -16,8 +17,21 @@ from model import UNet
 
 from data import *
 
+def get_inputs():
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument(
+    "-md",
+    "--model_directory",
+    default="./",
+    type=str,
+    help="directory where trained model is stored",
+  )
+  return parser.parse_args()
+
 with open("trainconfig.json") as f:
   config = json.load(f)
+
+args = get_inputs()
 
 device = torch.device("cpu")
 
@@ -62,8 +76,11 @@ elif config["train3d"]["model"].lower() == "enet":
 else:
   raise AssertionError("Unrecognised model. Exiting.")
 
-model.load_state_dict(torch.load(f"./{model_string}model.pt"))
+model.load_state_dict(torch.load(f"{args.model_directory}/{model_string}model.pt"))
 
+dice_list = []
+roc_auc_list = []
+prec_recall_auc_list = []
 for i in range(len(val_data)):
   print(f"validation {val_labels[i].split('/')[-1]}")
   X, y = val_data.__getitem__(i)
@@ -98,6 +115,15 @@ for i in range(len(val_data)):
   prec, recall, _ = precision_recall_curve(target_label.reshape(-1), predicted_label.reshape(-1), pos_label=1)
   prec_recall_auc = auc(prec, recall)
 
+  dice_list.append(dice_coeff)
+  roc_auc_list.append(roc_auc)
+  prec_recall_auc_list.append(prec_recall_auc)
+
   print("Precision-recall area under curve is", prec_recall_auc)
   print()
+
+np.savetxt("validation_dice.txt", dice_list)
+np.savetxt("validation_roc_auc.txt", roc_auc_list)
+np.savetxt("validation_precision_recall_auc.txt", prec_recall_auc_list)
+
 

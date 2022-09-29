@@ -75,6 +75,7 @@ def getLargestIsland(segmentation):
   Take binary segmentation, as sitk.Image or np.ndarray,
   and return largest connected 'island'.
   '''
+  seg_sitk = False
   if type(segmentation) == sitk.Image:
       seg_sitk = True
       segmentation = sitk.GetArrayFromImage(segmentation).astype(np.int16)
@@ -157,41 +158,26 @@ class SegmentSet(data.Dataset):
     scans_path and masks_path are the paths of the folders containing the data
     mode : 2d will return slices
   """
-  def __init__(self, list_scans, scans_path, mode = "3d", scan_size=[128, 128, 128], crop_fraction=0.):
-    self.list_scans = list_scans
+  def __init__(self, scans_path, crop_fraction=0.0):
+
     self.scans_path = scans_path
-    self.mode = mode
-    self.scan_size = scan_size
     self.crop_fraction = crop_fraction
 
   def __len__(self):
-    return len(self.list_scans)
+    return len(self.scans_path)
 
   def __getitem__(self, index):
 
-    scan = self.list_scans[index]
-
     #load scan and mask
-    path = self.scans_path
-    series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(path)
-    if series_IDs: #-Sanity check
-      print("READING DICOM")
-      filetype = "DICOM"
-      series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(path, series_IDs[0])
-      series_reader = sitk.ImageSeriesReader()
-      series_reader.SetFileNames(series_file_names)
-      # Configure the reader to load all of the DICOM tags (public+private).
-      series_reader.MetaDataDictionaryArrayUpdateOn()
-      ct_scanOrig = series_reader.Execute() #-Get images
-    else:
-      ct_scanOrig = sitk.ReadImage(path+"/"+scan)
+    ct_scan, ct_orig, ct_space = utils.load_itk(self.scans_path[index])
+    ct_scanOrig = sitk.ReadImage(self.scans_path[index])
 
     #ct_scan=sitk.GetImageFromArray(ct_scan)
     #ct_scan=resampleImage(ct_scanOrig, self.scan_size)
     #ct_scan=sitk.GetArrayFromImage(ct_scan)
     if self.crop_fraction != 0.:
-      ct_scanOrig = rg_based_crop_for_cnn(ct_scanOrig, self.crop_fraction)
-    ct_scan=sitk.GetArrayFromImage(ct_scanOrig)
+      ct_scan = rg_based_crop_for_cnn(ct_scan, self.crop_fraction)
+    #ct_scan=sitk.GetArrayFromImage(ct_scanOrig)
     minCutoff = -1000
     ct_scan=truncate(ct_scan, minCutoff, 600)
     ct_scan=(ct_scan-(minCutoff)) / 1600 # normalise HU

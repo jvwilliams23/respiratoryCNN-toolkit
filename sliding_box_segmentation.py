@@ -4,71 +4,56 @@ Split image in half with plane in X-direction. Segment each half with UNet then 
 """
 import argparse
 import numpy as np
-import pickle
-import nrrd
 from copy import copy
 import hjson
 import os
 import torch
 import SimpleITK as sitk
 from data.seg_dataset import resampleImage
-from torch.utils import data
-import torch.optim as optim
-import torch.nn as nn
-from torch.nn import functional as F
+#from torch.utils import data
 from glob import glob
 from sys import exit
-import nrrd
 from os import mkdir
 from distutils.util import strtobool
 import vedo as v
 
+from cleanup_tools import CleanupTools
 import model
 from data import *
 
 with open("config.json") as f:
   config = hjson.load(f)
 
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument(
-  "-bd",
-  "--bounding_box_dir",
-  default="bounding_boxes/",
-  type=str,
-  help="Directory to save bounding boxes",
-)
+def inputs():
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument(
+    "-i",
+    "--ct_path",
+    required=True,
+    type=str,
+    help="input image to segment /path/to/ct/*.mhd or /path/to/dicom/",
+  )
+  parser.add_argument(
+    "-bd",
+    "--bounding_box_dir",
+    default="bounding_boxes/",
+    type=str,
+    help="Directory to save bounding boxes",
+  )
+  return parser.parse_args()
 
-args = parser.parse_args()
-
+args = inputs()
 
 device = torch.device("cpu")
 
-if len(glob("segmentations/")) == 0:
-  mkdir("segmentations")
+# mkdir("segmentations")
+# mkdir(args.bounding_box_dir)
 
-if len(glob(args.bounding_box_dir)) == 0:
-  mkdir(args.bounding_box_dir)
-
-# list_scans = glob(config["path"]["test_scans"])
-list_scans = glob(config["path"]["test_scans"])  # -Lists all .mhd scans.
-
-# st_scans = [os.path.basename(s) for s in list_scans]
-
-print("st_scans", list_scans)
-
-
-# dataset = seg_dataset.SegmentSet(list_scans, config["path"]["test_scans"], mode="3d", scan_size=config["train3d"]["scan_size"])
-
-print(config["path"]["test_scans"])
-
-criterion = utils.lossTang2019  # utils.dice_loss
 unet = model.UNet(
   1, config["train3d"]["n_classes"], config["train3d"]["start_filters"]
 ).to(device)
-unet.load_state_dict(torch.load("./model.pt"))
+unet.load_state_dict(torch.load("./unet-model.pt"))
 
-writeNRRDlib = False
-writeSITK = True
 kwargs = {}
 crop_to_lobes = bool(strtobool(config["segment3d"]["crop_to_lobes"][0]))
 if crop_to_lobes:
@@ -81,89 +66,87 @@ if crop_to_lobes:
   lobes_arr = sitk.GetArrayFromImage(lobes_seg)
   lungs_arr = np.where(lobes_arr != 0, 1, 0)
   kwargs["lobe_seg"] = sitk.GetImageFromArray(lungs_arr)
+  # erode so that it is like cropping to airways
+  kwargs["lobe_seg"] = CleanupTools.binary_erode(kwargs["lobe_seg"], 10)
   del lungs_arr, lobes_seg, lobes_arr
 
-for i in range(len(list_scans)):
-  downsampling_on = bool(strtobool(config["segment3d"]["downsampling_on"][0]))
-  if downsampling_on:
-    downsampling_ratio = config["segment3d"]["downsample"]
-    kwargs["downsampling_ratio"] = downsampling_ratio
-  kwargs["num_boxes"] = config["segment3d"]["num_boxes"]
+# for i in range(len(list_scans)):
+downsampling_on = bool(strtobool(config["segment3d"]["downsampling_on"][0]))
+if downsampling_on:
+  downsampling_ratio = config["segment3d"]["downsample"]
+  kwargs["downsampling_ratio"] = downsampling_ratio
+kwargs["num_boxes"] = config["segment3d"]["num_boxes"]
 
-  dataset = seg_half_dataset.SegmentSet(
-    list_scans[i], list_scans[i], downsample=downsampling_on, **kwargs
+dataset = seg_half_dataset.SegmentSet(
+  [args.ct_path], downsample=downsampling_on, **kwargs
+)
+segID = config["path"]["output_id"]
+print("writeID is", segID)
+
+(
+  input_windows,
+  origin_list,
+  spacing,
+  lower_list,
+  mid_point_list,
+  upper_list,
+  bounding_box_to_tissue,
+  bounding_box_to_lobes,
+) = dataset.__getitem__(i)
+# save bounding boxes to be used in cleanup
+np.savetxt(
+  f"{args.bounding_box_dir}/bounding_box_to_tissue-{segID}.txt",
+  bounding_box_to_tissue,
+  header="xmin, ymin, zmin, xsize, ysize, zsize",
+)
+np.savetxt(
+  f"{args.bounding_box_dir}/bounding_box_to_lobes-{segID}.txt",
+  bounding_box_to_lobes,
+  header="xmin, ymin, zmin, xsize, ysize, zsize",
+)
+labelMap_windows = [None] * len(input_windows)
+for w, window in enumerate(input_windows):
+  window = torch.Tensor(
+    np.array([window[np.newaxis, :].astype(np.float16)])
+  ).to(
+    device
+  )  # scan
+  logits = unet(window)
+  labelMap_windows[w] = torch.max(logits[0], 0)[1].numpy()
+  del logits
+vol_list = []
+box_size = (upper_list[0] - lower_list[0]) // 2
+print(f"box size is {box_size}")
+combined_vol = copy(labelMap_windows[0])
+for j, (window, origin) in enumerate(
+  zip(labelMap_windows[1:], origin_list[1:])
+):
+  print(
+    j,
+    mid_point_list[j],
+    window[:, :, :box_size].shape,
+    combined_vol[:, :, mid_point_list[j] :].shape,
   )
-  segID = config["path"]["output_id"]
-  print("-" * 30, "Getting and pre-processing scan")
-  print("writeID is", segID)
-  # get data item i
-  # X, X_orig = dataset.__getitem__(i)
-  (
-    input_windows,
-    origin_list,
-    spacing,
-    lower_list,
-    mid_point_list,
-    upper_list,
-    bounding_box_to_tissue,
-    bounding_box_to_lobes,
-  ) = dataset.__getitem__(i)
-  # save bounding boxes to be used in cleanup
-  np.savetxt(
-    f"{args.bounding_box_dir}/bounding_box_to_tissue-{segID}.txt",
-    bounding_box_to_tissue,
-    header="xmin, ymin, zmin, xsize, ysize, zsize",
+  # Calculate union of two windows of a binary label map
+  combined_vol[:, :, mid_point_list[j] :] += window[:, :, :box_size]
+  combined_vol[:, :, mid_point_list[j] :] = np.where(
+    combined_vol[:, :, mid_point_list[j] :] >= 1, 1, 0
   )
-  np.savetxt(
-    f"{args.bounding_box_dir}/bounding_box_to_lobes-{segID}.txt",
-    bounding_box_to_lobes,
-    header="xmin, ymin, zmin, xsize, ysize, zsize",
-  )
-  labelMap_windows = [None] * len(input_windows)
-  for w, window in enumerate(input_windows):
-    window = torch.Tensor(
-      np.array([window[np.newaxis, :].astype(np.float16)])
-    ).to(
-      device
-    )  # scan
-    print("-" * 30, "Getting probabilities")
-    logits = unet(window)
-    print("-" * 30, "Getting label map")
-    labelMap_windows[w] = torch.max(logits[0], 0)[1].numpy()
-    del logits
-  vol_list = []
-  box_size = (upper_list[0] - lower_list[0]) // 2
-  print(f"box size is {box_size}")
-  combined_vol = copy(labelMap_windows[0])
-  for j, (window, origin) in enumerate(
-    zip(labelMap_windows[1:], origin_list[1:])
-  ):
-    print(
-      j,
-      mid_point_list[j],
-      window[:, :, :box_size].shape,
-      combined_vol[:, :, mid_point_list[j] :].shape,
-    )
-    # Calculate union of two windows of a binary label map
-    combined_vol[:, :, mid_point_list[j] :] += window[:, :, :box_size]
-    combined_vol[:, :, mid_point_list[j] :] = np.where(
-      combined_vol[:, :, mid_point_list[j] :] >= 1, 1, 0
-    )
-    print("\t", combined_vol.shape[-1], window[:, :, box_size:].shape[-1])
-    combined_vol = np.dstack((combined_vol, window[:, :, box_size:]))
-    print("\t", combined_vol.shape[-1])
-  # so image axial direction is z-dir in sitk image
-  combined_vol = combined_vol.T
-  image_out = sitk.GetImageFromArray(combined_vol)
-  image_out.SetSpacing(spacing)
-  image_out.SetOrigin(origin_list[0])
-  print("Writing labelMap to mhd")
-  sitk.WriteImage(
-    image_out, "./segmentations/seg-{0}-{1}.mhd".format(segID, "airway")
-  )
-  print("numpy to volume")
-  vol = v.Volume(combined_vol, spacing=spacing)
-  # mesh = vol.isosurface()#largest=True)
-  mesh = vol.isosurface(largest=True)
-  print("Writing vtk surface mesh")
-  v.write(mesh, f"{segID}_mm_airway.vtk")
+  print("\t", combined_vol.shape[-1], window[:, :, box_size:].shape[-1])
+  combined_vol = np.dstack((combined_vol, window[:, :, box_size:]))
+  print("\t", combined_vol.shape[-1])
+# so image axial direction is z-dir in sitk image
+combined_vol = combined_vol.T
+image_out = sitk.GetImageFromArray(combined_vol)
+image_out.SetSpacing(spacing)
+image_out.SetOrigin(origin_list[0])
+print("Writing labelMap to mhd")
+sitk.WriteImage(
+  image_out, "./segmentations/seg-{0}-{1}.mhd".format(segID, "airway")
+)
+print("numpy to volume")
+vol = v.Volume(combined_vol, spacing=spacing)
+mesh = vol.isosurface()#largest=True)
+#mesh = vol.isosurface(largest=True)
+print("Writing vtk surface mesh")
+v.write(mesh, f"{segID}_mm_airway.vtk")

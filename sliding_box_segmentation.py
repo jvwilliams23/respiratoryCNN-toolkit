@@ -10,7 +10,8 @@ import os
 import torch
 import SimpleITK as sitk
 from data.seg_dataset import resampleImage
-#from torch.utils import data
+
+# from torch.utils import data
 from glob import glob
 from sys import exit
 from os import mkdir
@@ -23,6 +24,7 @@ from data import *
 
 with open("config.json") as f:
   config = hjson.load(f)
+
 
 def get_inputs():
   parser = argparse.ArgumentParser(description=__doc__)
@@ -56,6 +58,7 @@ def get_inputs():
   )
   return parser.parse_args()
 
+
 args = get_inputs()
 
 device = torch.device("cpu")
@@ -75,7 +78,7 @@ if crop_to_lobes:
   print(f"Reading lobes file {config['segment3d']['lobes_dir']}")
   lobes_file = glob(config["segment3d"]["lobes_dir"])[0]
   print(f"glob finds: {glob(config['segment3d']['lobes_dir'])}")
-  #kwargs["lobe_seg"] = config["segment3d"]["lobes_dir"]
+  # kwargs["lobe_seg"] = config["segment3d"]["lobes_dir"]
   lobes_seg = sitk.ReadImage(lobes_file)
   lobes_arr = sitk.GetArrayFromImage(lobes_seg)
   lungs_arr = np.where(lobes_arr != 0, 1, 0)
@@ -156,9 +159,18 @@ if args.largest_only:
 image_out = sitk.GetImageFromArray(combined_vol)
 image_out.SetSpacing(spacing)
 image_out.SetOrigin(origin_list[0])
+image_out = utils.resample_image(
+  image_out, interpolator=sitk.sitkNearestNeighbor, voxel_size=[np.min(spacing)/2.0] * 3
+)
+print(f"output image size {image_out.GetSize()}")
 print("Writing labelMap to mhd")
-sitk.WriteImage(image_out, f"{args.write_dir}/seg-{segID}-airway.mhd")
+sitk.WriteImage(image_out, f"{args.write_dir}/seg-{segID}-airway.mhd", True)
 print("numpy to volume")
-mesh = utils.numpy_to_surface(combined_vol, spacing=spacing, origin=origin_list[0], largest=args.largest_only)
+mesh = utils.numpy_to_surface(
+  sitk.GetArrayFromImage(image_out).T,
+  spacing=image_out.GetSpacing(),
+  origin=image_out.GetOrigin(),
+  largest=args.largest_only,
+)
 print("Writing vtk surface mesh")
 v.write(mesh, f"{args.write_dir}/{segID}_mm_airway.vtk")

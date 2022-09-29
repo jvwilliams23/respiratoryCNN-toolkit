@@ -300,27 +300,22 @@ class SegmentSet(data.Dataset):
   scans_path and masks_path are the paths of the folders containing the data
   """
 
-  def __init__(self, list_scans, scans_path, downsample=False, **kwargs):
-    self.list_scans = list_scans
+  def __init__(self, scans_path, downsample=False, **kwargs):
     self.scans_path = scans_path
     self.downsample = downsample
     self.kwargs = kwargs
 
   def __len__(self):
-    return len(self.list_scans)
+    return len(self.scans_path)
 
   def __getitem__(self, index):
 
-    scan = self.list_scans[index]
-
     # load scan and mask
-    path = self.scans_path
-    series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(path)
+    series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(self.scans_path[index])
+    sitk.ProcessObject_SetGlobalWarningDisplay(False)
     if series_IDs:  # -Sanity check
-      print("READING DICOM")
-      filetype = "DICOM"
       series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(
-        path, series_IDs[0]
+        self.scans_path[index], series_IDs[0]
       )
       series_reader = sitk.ImageSeriesReader()
       series_reader.SetFileNames(series_file_names)
@@ -328,7 +323,8 @@ class SegmentSet(data.Dataset):
       series_reader.MetaDataDictionaryArrayUpdateOn()
       ct_scanOrig = series_reader.Execute()  # -Get images
     else:
-      ct_scanOrig = sitk.ReadImage(path)
+      ct_scanOrig = sitk.ReadImage(self.scans_path[index])
+    sitk.ProcessObject_SetGlobalWarningDisplay(True)
 
     if "crop_to_lobes" in self.kwargs.keys():
         """

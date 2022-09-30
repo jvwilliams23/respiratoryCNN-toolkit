@@ -252,10 +252,10 @@ def rg_based_crop_to_pre_segmented_lobes(image, seg):
   bounding_box_to_tissue = [0, 0, 0] + list(image.GetSize())
   label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
   label_shape_filter.Execute(seg)
-  bounding_box_to_lobes = label_shape_filter.GetBoundingBox(
-    1
-  )  # -1 due to binary nature of threshold
+  bounding_box_to_lobes = list(label_shape_filter.GetBoundingBox(1))
   # -The bounding box's first "dim" entries are the starting index and last "dim" entries the size
+  bounding_box_to_lobes[2] = 0
+  bounding_box_to_lobes[-1] = image.GetSize()[-1]
   roi = sitk.RegionOfInterest(
     image,
     bounding_box_to_lobes[int(len(bounding_box_to_lobes) / 2) :],
@@ -347,6 +347,10 @@ class SegmentSet(data.Dataset):
         bb_default = list(np.zeros(3)) + list(ct_scanOrig.GetSize())
         bounding_box_to_tissue = bb_default
         bounding_box_to_lobes = bb_default
+    if self.downsample:
+      ct_scanOrig = u.resample_image(ct_scanOrig, **self.kwargs)
+      print(f"downsampled image size is {ct_scanOrig.GetSize()}")
+
 
     num_z_slices = ct_scanOrig.GetSize()[2]
     num_z_ceil_100 = int(ceil(num_z_slices / 100)) * 100
@@ -357,9 +361,9 @@ class SegmentSet(data.Dataset):
     pad.SetConstant(0)
     ct_scanOrig = pad.Execute(ct_scanOrig)
     # ct_scan=sitk.GetImageFromArray(ct_scan)
-    if self.downsample:
-      ct_scanOrig = u.resampleImage(ct_scanOrig, **self.kwargs)
-      print(f"downsampled image size is {ct_scanOrig.GetSize()}")
+    #if self.downsample:
+    #  ct_scanOrig = u.resample_image(ct_scanOrig, **self.kwargs)
+    #  print(f"downsampled image size is {ct_scanOrig.GetSize()}")
     #   half = sitk.GetArrayFromImage(half)
     (
       roi_list,

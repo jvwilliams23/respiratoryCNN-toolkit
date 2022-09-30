@@ -93,11 +93,12 @@ if downsampling_on:
   downsampling_ratio = config["segment3d"]["downsample"]
   kwargs["downsampling_ratio"] = downsampling_ratio
 kwargs["num_boxes"] = config["segment3d"]["num_boxes"]
+kwargs["voxel_size"] = [0.5, 0.5, 0.5]
 
 dataset = seg_half_dataset.SegmentSet(
   args.ct_path, downsample=downsampling_on, **kwargs
 )
-segID = config["path"]["output_id"]
+segID = config["segment3d"]["output_id"]
 print("writeID is", segID)
 
 (
@@ -159,9 +160,6 @@ if args.largest_only:
 image_out = sitk.GetImageFromArray(combined_vol)
 image_out.SetSpacing(spacing)
 image_out.SetOrigin(origin_list[0])
-image_out = utils.resample_image(
-  image_out, interpolator=sitk.sitkNearestNeighbor, voxel_size=[np.min(spacing)/2.0] * 3
-)
 print(f"output image size {image_out.GetSize()}")
 print("Writing labelMap to mhd")
 sitk.WriteImage(image_out, f"{args.write_dir}/seg-{segID}-airway.mhd", True)

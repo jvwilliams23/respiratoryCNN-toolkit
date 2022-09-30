@@ -264,18 +264,30 @@ def extract_largest_island(segmentation):
   seg_sitk = False
   if type(segmentation) == sitk.Image:
     seg_sitk = True
+    segOrig = copy(segmentation)
     # logger.info("extract_largest_island, changing sitk.Image to array")
     segmentation = sitk.GetArrayFromImage(segmentation).astype(np.int16)
 
-  labels = label(segmentation).astype(np.int8)  # -get connected component
+  tot_voxel_num = segmentation.size
+  labels = label(segmentation)#.astype(np.int8)  # -get connected component
   assert labels.max() != 0  # assume at least 1 connected component
   # -get largest connected region (converts from True/False to 1/0)
+  unique_labels = np.array(np.unique(labels.flat, return_counts=True))
+  #print("unique labels are")
+  #print(unique_labels)
+  #max_label = unique_labels[0][unique_labels[1].argmax()]
+  max_label = unique_labels[0][np.argsort(unique_labels[1], axis=0)[-2]]
+  #max_label = np.argmax(np.bincount(labels.flat)[1:]) + 1
+  #print("max label is ", max_label)
   largestIsland = np.array(
-    labels == np.argmax(np.bincount(labels.flat)[1:]) + 1, dtype=np.int8
+    labels == max_label, dtype=np.int8
   )
+  largestIsland_vox_num = largestIsland.sum()
+  #print("island to total volume ratio", largestIsland_vox_num / tot_voxel_num)
   # -if sitk.Image input, return type sitk.Image
   if seg_sitk:
     largestIsland = sitk.GetImageFromArray(largestIsland)
+    largestIsland.CopyInformation(segOrig)
   return largestIsland
 
 def numpy_to_surface(arr, spacing=[1, 1, 1], origin=[0, 0, 0], largest=True):
@@ -312,7 +324,7 @@ def resample_image(imageIn, interpolator=sitk.sitkLinear, **kwargs):
       kwargs["downsampling_ratio"]
     )
     print(f"downsampling to {output_spacing}")
-  elif "voxel_size" in kwargs.keys():
+  if "voxel_size" in kwargs.keys():
     voxel_size = kwargs["voxel_size"]
     print("voxel size", voxel_size)
     print("type voxel size", type(voxel_size))
@@ -332,9 +344,9 @@ def resample_image(imageIn, interpolator=sitk.sitkLinear, **kwargs):
   output_origin = imageIn.GetOrigin()
   # Compute grid size based on the physical size and spacing.
   output_size = np_to_ints([
-    input_size[0] / output_spacing[0],
-    input_size[1] / output_spacing[1],
-    input_size[2] / output_spacing[2],
+    input_size[0] * input_spacing[0] / output_spacing[0],
+    input_size[1] * input_spacing[1] / output_spacing[1],
+    input_size[2] * input_spacing[2] / output_spacing[2],
   ])
   resampled_image = sitk.Resample(
     imageIn,

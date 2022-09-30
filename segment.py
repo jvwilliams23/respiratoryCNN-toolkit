@@ -46,12 +46,12 @@ unet = model.UNet(
 unet.load_state_dict(torch.load("./unet-model.pt"))
 
 dataset = seg_dataset.SegmentSet(
-  [args.ct_path],
+  args.ct_path,
   crop_fraction=config["segment3d"]["crop_fraction"],
 )
 
 # get data item i
-X, X_orig = dataset.__getitem__(0)
+X, X_orig = dataset.__getitem__()
 
 # format data to be read by NN
 X = torch.Tensor(np.array([X.astype(np.float16)])).to(device)  # scan
@@ -72,6 +72,7 @@ for l, label in enumerate([1]):
   # pad.SetPadUpperBound((1, 1, 1))
   # pad.SetConstant(0)
   # segmentation[l] = pad.Execute(segmentation[l])
+  sitk.WriteImage(sitk.GetImageFromArray(segmentation[l]), args.output_surface.replace(".stl", ".mhd"), True)
 
   vol = v.Volume(
     np.pad(segmentation[l].T, 1),

@@ -329,10 +329,12 @@ class SegmentSet(data.Dataset):
     # in z-direction to facilitate this. Padding should always be > 1
     num_z_slices = ct_scanOrig.GetSize()[2]
     num_z_ceil_100 = int(ceil(num_z_slices / 100)) * 100
-    num_z_to_pad = num_z_ceil_100 - num_z_slices - 1
+    num_z_to_pad = num_z_ceil_100 - num_z_slices
+    num_z_to_pad = max(num_z_to_pad, 0)
+    logger.info(f"try to pad {num_z_to_pad} in z-direction")
     pad = sitk.ConstantPadImageFilter()
-    pad.SetPadLowerBound((1, 1, 1))
-    pad.SetPadUpperBound((1, 1, num_z_to_pad))
+    pad.SetPadLowerBound((1, 1, 0))
+    pad.SetPadUpperBound((1, 1, int(num_z_to_pad)))
     pad.SetConstant(0)
     ct_scanOrig = pad.Execute(ct_scanOrig)
     # ct_scan=sitk.GetImageFromArray(ct_scan)

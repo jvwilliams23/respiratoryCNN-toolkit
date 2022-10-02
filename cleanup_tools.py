@@ -74,7 +74,7 @@ class CleanupTools:
   ):
     seg_padded = self._repad_cropped_segmentation(segmentation)
     seg_cropped, bounding_box = self._crop_edges(seg_padded)
-    seg_cropped = seg_half_dataset.getLargestIsland(seg_cropped)
+    seg_cropped = u.extract_largest_island(seg_cropped)
     del seg_padded
     seg_repadded = self._repad_cropped_segmentation_post(
       seg_cropped, bounding_box
@@ -91,7 +91,7 @@ class CleanupTools:
   def cleanup_cropped_segmentation(self, ct_original, segmentation, **kwargs):
     seg_padded = self._repad_cropped_segmentation(segmentation)
     seg_cropped, bounding_box = self._crop_edges(seg_padded)
-    seg_cropped = seg_half_dataset.getLargestIsland(seg_cropped)
+    seg_cropped = u.extract_largest_island(seg_cropped)
     # del seg_padded
     seg_repadded = self._repad_cropped_segmentation_post(
       seg_cropped, bounding_box
@@ -241,7 +241,7 @@ class CleanupTools:
 
     # seg = copy(roi)
     # seg = binary_erode(seg_tmp)
-    # seg = seg_half_dataset.getLargestIsland(seg)
+    # seg = u.extract_largest_island(seg)
 
   # @staticmethod
   # def get_highest_point_in_z_dir(segmentation):

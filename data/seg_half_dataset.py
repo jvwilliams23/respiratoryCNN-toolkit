@@ -265,34 +265,6 @@ def rg_based_crop_to_pre_segmented_lobes(image, seg):
   print("roi size is", roi.GetSize())
   return roi, bounding_box_to_tissue, bounding_box_to_lobes
 
-
-def getLargestIsland(segmentation):
-  """
-  Take binary segmentation, as sitk.Image or np.ndarray,
-  and return largest connected 'island'.
-  """
-  if type(segmentation) == sitk.Image:
-    seg_sitk = True
-    labels = label(sitk.GetArrayFromImage(segmentation).astype(np.int16)).astype(np.int16)  # -get connected component
-  else:
-    labels = label(segmentation).astype(np.int16)  # -get connected component
-
-  assert labels.max() != 0  # assume at least 1 connected component
-  # -get largest connected region (converts from True/False to 1/0)
-  largestIsland_arr = np.array(
-    labels == np.argmax(np.bincount(labels.flat)[1:]) + 1, dtype=np.int8
-  )
-  del labels
-  # -if sitk.Image input, return type sitk.Image
-  if seg_sitk:
-    largestIsland = sitk.GetImageFromArray(largestIsland_arr)
-    del largestIsland_arr
-    largestIsland.CopyInformation(segmentation)
-    return largestIsland
-  else:
-    return largestIsland_arr
-
-
 class SegmentSet(data.Dataset):
   """
   list_scans is a list containing the filenames of scans

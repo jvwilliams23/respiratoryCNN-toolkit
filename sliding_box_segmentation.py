@@ -96,7 +96,7 @@ unet = model.UNet(
 unet.load_state_dict(torch.load("./unet-model.pt"))
 
 kwargs = {}
-crop_to_lobes = bool(strtobool(config["segment3d"]["crop_to_lobes"][0]))
+crop_to_lobes = config["segment3d"]["crop_to_lobes"]
 if crop_to_lobes:
   kwargs["crop_to_lobes"] = crop_to_lobes
   print(f"Reading lobes file {config['segment3d']['lobes_dir']}")
@@ -112,17 +112,22 @@ if crop_to_lobes:
   del lungs_arr, lobes_seg, lobes_arr
 
 # for i in range(len(list_scans)):
-downsampling_on = bool(strtobool(config["segment3d"]["downsampling_on"][0]))
-if downsampling_on:
-  downsampling_ratio = config["segment3d"]["downsample"]
-  kwargs["downsampling_ratio"] = downsampling_ratio
 kwargs["num_boxes"] = config["segment3d"]["num_boxes"]
-kwargs["voxel_size"] = [0.5, 0.5, 0.5]
+downsampling_on = False
+if config["segment3d"]["downsampling_on"] or config["segment3d"]["resampling_on"]:
+  downsampling_ratio = config["segment3d"]["downsample"]
+  downsampling_on = True  
+  if config["segment3d"]["resampling_on"]:
+    kwargs["voxel_size"] = [0.5, 0.5, 0.5]
+  elif config["segment3d"]["downsampling_on"]:
+    kwargs["downsampling_ratio"] = downsampling_ratio
+
+#kwargs["voxel_size"] = [0.5, 0.5, 0.5]
 
 dataset = seg_half_dataset.SegmentSet(
   args.ct_path, downsample=downsampling_on, **kwargs
 )
-segID = config["segment3d"]["output_id"]
+#segID = config["segment3d"]["output_id"]
 print("writeID is", segID)
 
 (
@@ -189,7 +194,7 @@ print("Writing labelMap to mhd")
 sitk.WriteImage(image_out, f"{args.write_dir}/seg-{segID}-airway.mhd", True)
 print("numpy to volume")
 mesh = utils.numpy_to_surface(
-  sitk.GetArrayFromImage(image_out).T,
+  combined_vol,
   spacing=image_out.GetSpacing(),
   origin=image_out.GetOrigin(),
   largest=args.largest_only,

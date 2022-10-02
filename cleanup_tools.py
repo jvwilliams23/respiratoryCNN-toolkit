@@ -164,7 +164,7 @@ class CleanupTools:
       bounding_box_to_crop = [1, 1, 1] + list(output_img_shape - 2)[:-1]
       # add zsize to cropping bounding box list
       bounding_box_to_crop.extend([self.bb_to_lobes[-1] + rhs_padding[2]])
-      bounding_box_to_crop = u.npToInts(bounding_box_to_crop)
+      bounding_box_to_crop = u.np_to_ints(bounding_box_to_crop)
       segmentation = sitk.RegionOfInterest(
         segmentation,
         bounding_box_to_crop[int(len(bounding_box_to_crop) / 2) :],
@@ -179,8 +179,8 @@ class CleanupTools:
     # pad segmentation to account for cropping to lobes
     print("cropped size is ", segmentation.GetSize())
     pad = sitk.ConstantPadImageFilter()
-    pad.SetPadLowerBound(u.npToInts(lhs_padding))
-    pad.SetPadUpperBound(u.npToInts(rhs_padding))
+    pad.SetPadLowerBound(u.np_to_ints(lhs_padding))
+    pad.SetPadUpperBound(u.np_to_ints(rhs_padding))
     pad.SetConstant(0)
     segmentation = pad.Execute(segmentation)
     seg_repadded = copy(segmentation)
@@ -214,8 +214,8 @@ class CleanupTools:
     print("cropped size is ", segmentation.GetSize())
     print(f"bounding_box is {bounding_box}")
     pad = sitk.ConstantPadImageFilter()
-    pad.SetPadLowerBound(u.npToInts(lhs_padding))
-    pad.SetPadUpperBound(u.npToInts(rhs_padding))
+    pad.SetPadLowerBound(u.np_to_ints(lhs_padding))
+    pad.SetPadUpperBound(u.np_to_ints(rhs_padding))
     pad.SetConstant(0)
     segmentation = pad.Execute(segmentation)
     seg_repadded = copy(segmentation)
@@ -229,7 +229,7 @@ class CleanupTools:
     lower_bound = np.round(np.zeros(3) + size * pct_to_crop_each_side // 100.0)
     upper_bound = np.round(size - 2.0 * size * pct_to_crop_each_side // 100.0)
 
-    bounding_box = list(u.npToInts(lower_bound)) + list(u.npToInts(upper_bound))
+    bounding_box = list(u.np_to_ints(lower_bound)) + list(u.np_to_ints(upper_bound))
 
     roi = sitk.RegionOfInterest(
       segmentation,
@@ -253,7 +253,7 @@ class CleanupTools:
   #   # find where the highest seed is located in the array "label_1"
   #   highest_seed_loc_in_array = label_1[2].argmax()
   #   # get xyz voxel indexes of highest seed and use for region-growing
-  #   seed = u.npToInts(np.array(label_1)[:, highest_seed_loc_in_array])
+  #   seed = u.np_to_ints(np.array(label_1)[:, highest_seed_loc_in_array])
   #   seed_list = [seed]
   #   return seed_list
 
@@ -289,7 +289,7 @@ class CleanupTools:
     # find where the highest seed is located in the array "label_1"
     highest_seed_loc_in_array = label_1[2].argmax()
     # get xyz voxel indexes of highest seed and use for region-growing
-    seed = u.npToInts(np.array(label_1)[:, highest_seed_loc_in_array])
+    seed = u.np_to_ints(np.array(label_1)[:, highest_seed_loc_in_array])
     return seed
 
   @staticmethod

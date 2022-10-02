@@ -61,7 +61,7 @@ def get_highest_point_in_z_dir(seg):
   # find where the highest seed is located in the array "label_1"
   highest_seed_loc_in_array = label_1[2].argmax()
   # get xyz voxel indexes of highest seed and use for region-growing
-  seed = u.npToInts(np.array(label_1)[:, highest_seed_loc_in_array])
+  seed = u.np_to_ints(np.array(label_1)[:, highest_seed_loc_in_array])
   seed_list = [seed]
   return seed_list
 
@@ -114,7 +114,7 @@ if rhs_padding[2] < 0:
   bounding_box_to_crop = [1, 1, 1] + list(output_img_shape - 2)[:-1]
   # add zsize to cropping bounding box list
   bounding_box_to_crop.extend([bb_to_lobes[-1] + rhs_padding[2]])
-  bounding_box_to_crop = u.npToInts(bounding_box_to_crop)
+  bounding_box_to_crop = u.np_to_ints(bounding_box_to_crop)
   seg = sitk.RegionOfInterest(
     seg,
     bounding_box_to_crop[int(len(bounding_box_to_crop) / 2) :],  # [::-1],
@@ -129,8 +129,8 @@ print("padding to upper bound is", rhs_padding)  # [::-1])
 # pad segmentation to account for cropping to lobes
 print("cropped size is ", seg.GetSize())
 pad = sitk.ConstantPadImageFilter()
-pad.SetPadLowerBound(u.npToInts(lhs_padding))  # [::-1]))
-pad.SetPadUpperBound(u.npToInts(rhs_padding))  # [::-1]))
+pad.SetPadLowerBound(u.np_to_ints(lhs_padding))  # [::-1]))
+pad.SetPadUpperBound(u.np_to_ints(rhs_padding))  # [::-1]))
 pad.SetConstant(0)
 seg = pad.Execute(seg)
 seg_repadded = copy(seg)

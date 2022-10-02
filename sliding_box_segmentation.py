@@ -3,6 +3,7 @@ Split image in half with plane in X-direction. Segment each half with UNet then 
 
 """
 import argparse
+import logging
 import numpy as np
 from copy import copy
 import hjson
@@ -10,19 +11,28 @@ import os
 import torch
 import SimpleITK as sitk
 from data.seg_dataset import resampleImage
-#from torch.utils import data
+
+# from torch.utils import data
 from glob import glob
 from sys import exit
 from os import mkdir
 from distutils.util import strtobool
 import vedo as v
 
+if __name__ == "__main__":
+  logging.basicConfig(
+    filename="log_sliding_box_segmentation.log",
+    filemode="a",
+    format="%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+    level=logging.DEBUG,
+  )
+  logger = logging.getLogger(__name__)
+
+
 from cleanup_tools import CleanupTools
 import model
 from data import *
-
-with open("config.json") as f:
-  config = hjson.load(f)
 
 def get_inputs():
   parser = argparse.ArgumentParser(description=__doc__)
@@ -32,6 +42,13 @@ def get_inputs():
     required=True,
     type=str,
     help="input image to segment /path/to/ct/*.mhd or /path/to/dicom/",
+  )
+  parser.add_argument(
+    "-c",
+    "--config_file",
+    default="config.json",
+    type=str,
+    help="configuration json file /path/to/config.json [default config.json]",
   )
   parser.add_argument(
     "-wd",
@@ -56,7 +73,17 @@ def get_inputs():
   )
   return parser.parse_args()
 
+
 args = get_inputs()
+with open(args.config_file) as f:
+  config = hjson.load(f)
+segID = config["segment3d"]["output_id"]
+
+logging.getLogger("matplotlib.font_manager").disabled = True
+
+logger.info(f"config {config}")
+logger.info(f"argparser: {args}")
+logger.info(f"data will be written to e.g.: {args.write_dir}/seg-{segID}-airway.mhd")
 
 device = torch.device("cpu")
 
@@ -69,13 +96,13 @@ unet = model.UNet(
 unet.load_state_dict(torch.load("./unet-model.pt"))
 
 kwargs = {}
-crop_to_lobes = bool(strtobool(config["segment3d"]["crop_to_lobes"][0]))
+crop_to_lobes = config["segment3d"]["crop_to_lobes"]
 if crop_to_lobes:
   kwargs["crop_to_lobes"] = crop_to_lobes
   print(f"Reading lobes file {config['segment3d']['lobes_dir']}")
   lobes_file = glob(config["segment3d"]["lobes_dir"])[0]
   print(f"glob finds: {glob(config['segment3d']['lobes_dir'])}")
-  #kwargs["lobe_seg"] = config["segment3d"]["lobes_dir"]
+  # kwargs["lobe_seg"] = config["segment3d"]["lobes_dir"]
   lobes_seg = sitk.ReadImage(lobes_file)
   lobes_arr = sitk.GetArrayFromImage(lobes_seg)
   lungs_arr = np.where(lobes_arr != 0, 1, 0)
@@ -85,16 +112,22 @@ if crop_to_lobes:
   del lungs_arr, lobes_seg, lobes_arr
 
 # for i in range(len(list_scans)):
-downsampling_on = bool(strtobool(config["segment3d"]["downsampling_on"][0]))
-if downsampling_on:
-  downsampling_ratio = config["segment3d"]["downsample"]
-  kwargs["downsampling_ratio"] = downsampling_ratio
 kwargs["num_boxes"] = config["segment3d"]["num_boxes"]
+downsampling_on = False
+if config["segment3d"]["downsampling_on"] or config["segment3d"]["resampling_on"]:
+  downsampling_ratio = config["segment3d"]["downsample"]
+  downsampling_on = True  
+  if config["segment3d"]["resampling_on"]:
+    kwargs["voxel_size"] = [0.5, 0.5, 0.5]
+  elif config["segment3d"]["downsampling_on"]:
+    kwargs["downsampling_ratio"] = downsampling_ratio
+
+#kwargs["voxel_size"] = [0.5, 0.5, 0.5]
 
 dataset = seg_half_dataset.SegmentSet(
   args.ct_path, downsample=downsampling_on, **kwargs
 )
-segID = config["path"]["output_id"]
+#segID = config["segment3d"]["output_id"]
 print("writeID is", segID)
 
 (
@@ -156,9 +189,15 @@ if args.largest_only:
 image_out = sitk.GetImageFromArray(combined_vol)
 image_out.SetSpacing(spacing)
 image_out.SetOrigin(origin_list[0])
+print(f"output image size {image_out.GetSize()}")
 print("Writing labelMap to mhd")
-sitk.WriteImage(image_out, f"{args.write_dir}/seg-{segID}-airway.mhd")
+sitk.WriteImage(image_out, f"{args.write_dir}/seg-{segID}-airway.mhd", True)
 print("numpy to volume")
-mesh = utils.numpy_to_surface(combined_vol, spacing=spacing, origin=origin_list[0], largest=args.largest_only)
+mesh = utils.numpy_to_surface(
+  combined_vol,
+  spacing=image_out.GetSpacing(),
+  origin=image_out.GetOrigin(),
+  largest=args.largest_only,
+)
 print("Writing vtk surface mesh")
 v.write(mesh, f"{args.write_dir}/{segID}_mm_airway.vtk")

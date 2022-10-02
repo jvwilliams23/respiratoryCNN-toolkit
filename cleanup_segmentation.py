@@ -145,7 +145,7 @@ assert img.GetSize() == seg.GetSize(), (
 
 print("getting largest island")
 seg = binary_erode(seg)
-seg = seg_half_dataset.getLargestIsland(seg)
+seg = u.extract_largest_island(seg)
 seed_list = get_highest_point_in_z_dir(seg)
 # sitk.WriteImage(seg, "seg.mhd")
 print("island to arr")

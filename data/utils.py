@@ -87,7 +87,7 @@ class EarlyStopping:
         self.val_loss_min = val_loss
 
 
-def npToInts(arr):
+def np_to_ints(arr):
   return [int(a) for a in arr]
 
 # Not sure if works for all format (Tested only on mhd/zraw format)
@@ -264,25 +264,37 @@ def extract_largest_island(segmentation):
   seg_sitk = False
   if type(segmentation) == sitk.Image:
     seg_sitk = True
+    segOrig = copy(segmentation)
     # logger.info("extract_largest_island, changing sitk.Image to array")
     segmentation = sitk.GetArrayFromImage(segmentation).astype(np.int16)
 
-  labels = label(segmentation).astype(np.int8)  # -get connected component
+  tot_voxel_num = segmentation.size
+  labels = label(segmentation)#.astype(np.int8)  # -get connected component
   assert labels.max() != 0  # assume at least 1 connected component
   # -get largest connected region (converts from True/False to 1/0)
+  unique_labels = np.array(np.unique(labels.flat, return_counts=True))
+  #print("unique labels are")
+  #print(unique_labels)
+  #max_label = unique_labels[0][unique_labels[1].argmax()]
+  max_label = unique_labels[0][np.argsort(unique_labels[1], axis=0)[-2]]
+  #max_label = np.argmax(np.bincount(labels.flat)[1:]) + 1
+  #print("max label is ", max_label)
   largestIsland = np.array(
-    labels == np.argmax(np.bincount(labels.flat)[1:]) + 1, dtype=np.int8
+    labels == max_label, dtype=np.int8
   )
+  largestIsland_vox_num = largestIsland.sum()
+  #print("island to total volume ratio", largestIsland_vox_num / tot_voxel_num)
   # -if sitk.Image input, return type sitk.Image
   if seg_sitk:
     largestIsland = sitk.GetImageFromArray(largestIsland)
+    largestIsland.CopyInformation(segOrig)
   return largestIsland
 
 def numpy_to_surface(arr, spacing=[1, 1, 1], origin=[0, 0, 0], largest=True):
   vol = v.Volume(arr, spacing=spacing, origin=origin)
   return vol.isosurface(largest=largest)
 
-def resampleImage(imageIn, interpolator=sitk.sitkLinear, **kwargs):
+def resample_image(imageIn, interpolator=sitk.sitkLinear, **kwargs):
   """
   Resamples image to improve quality and make isotropically spaced.
   Inputs:
@@ -302,59 +314,40 @@ def resampleImage(imageIn, interpolator=sitk.sitkLinear, **kwargs):
   ty = 0
   tz = 0
   euler3d.SetTranslation((tx, ty, tz))
-  extreme_points = [
-    imageIn.TransformIndexToPhysicalPoint((0, 0, 0)),
-    imageIn.TransformIndexToPhysicalPoint((imageIn.GetWidth(), 0, 0)),
-    imageIn.TransformIndexToPhysicalPoint(
-      (imageIn.GetWidth(), imageIn.GetHeight(), 0)
-    ),
-    imageIn.TransformIndexToPhysicalPoint(
-      (imageIn.GetWidth(), imageIn.GetHeight(), imageIn.GetDepth())
-    ),
-    imageIn.TransformIndexToPhysicalPoint(
-      (imageIn.GetWidth(), 0, imageIn.GetDepth())
-    ),
-    imageIn.TransformIndexToPhysicalPoint(
-      (0, imageIn.GetHeight(), imageIn.GetDepth())
-    ),
-    imageIn.TransformIndexToPhysicalPoint((0, 0, imageIn.GetDepth())),
-    imageIn.TransformIndexToPhysicalPoint((0, imageIn.GetHeight(), 0)),
-  ]
-  inv_euler3d = euler3d.GetInverse()
-  extreme_points_transformed = [
-    inv_euler3d.TransformPoint(pnt) for pnt in extreme_points
-  ]
 
-  min_x = min(extreme_points_transformed)[0]
-  min_y = min(extreme_points_transformed, key=lambda p: p[1])[1]
-  min_z = min(extreme_points_transformed, key=lambda p: p[2])[2]
-  max_x = max(extreme_points_transformed)[0]
-  max_y = max(extreme_points_transformed, key=lambda p: p[1])[1]
-  max_z = max(extreme_points_transformed, key=lambda p: p[2])[2]
   # Use the original spacing (arbitrary decision).
   input_spacing = imageIn.GetSpacing()
+  input_size = imageIn.GetSize()
   # print(output_spacing)
   if "downsampling_ratio" in kwargs.keys():
     output_spacing = np.array(input_spacing) * np.array(
       kwargs["downsampling_ratio"]
     )
     print(f"downsampling to {output_spacing}")
-  elif "voxel_size" in kwargs.keys():
+  if "voxel_size" in kwargs.keys():
     voxel_size = kwargs["voxel_size"]
-    if type(voxel_size) != float:
-      output_spacing = voxel_size
-    else:
-      output_spacing = (voxel_size, voxel_size, voxel_size)
+    print("voxel size", voxel_size)
+    print("type voxel size", type(voxel_size))
+    # check that voxel size is list, tuple or np array 
+    try:
+      len(voxel_size)
+    except TypeError:
+      raise TypeError(
+        f"resample_image kwargs 'voxel_size' type {type(voxel_size)} be list\n"
+        f"value is currently {voxel_size}"
+      )
+    output_spacing = voxel_size
+  print("out spacing is", output_spacing)
   # Identity cosine matrix (arbitrary decision).
   output_direction = imageIn.GetDirection()
   # Minimal x,y coordinates are the new origin.
   output_origin = imageIn.GetOrigin()
   # Compute grid size based on the physical size and spacing.
-  output_size = [
-    int((max_x - min_x) / output_spacing[0]),
-    int((max_y - min_y) / output_spacing[1]),
-    int((max_z - min_z) / output_spacing[2]),
-  ]
+  output_size = np_to_ints([
+    input_size[0] * input_spacing[0] / output_spacing[0],
+    input_size[1] * input_spacing[1] / output_spacing[1],
+    input_size[2] * input_spacing[2] / output_spacing[2],
+  ])
   resampled_image = sitk.Resample(
     imageIn,
     output_size,

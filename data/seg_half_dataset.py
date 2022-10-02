@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import nrrd, os, scipy.ndimage
 from glob import glob
@@ -11,6 +12,7 @@ from skimage.measure import label, regionprops
 from . import utils as u
 import vedo as v
 
+logger = logging.getLogger(__name__)
 
 def truncate(image, min_bound, max_bound):
   image[image < min_bound] = min_bound
@@ -68,9 +70,6 @@ def sliding_window_crop(image, num_boxes=5, crop_dir=2, overlap=2):
   # vp.show()
   # exit()
   print("sitk image shape", image.GetSize())
-  print(
-    f"np array shape {image_arr.shape}, min {image_arr.min()}, max {image_arr.max()}"
-  )
 
   bb_lower = bounding_box[0 : int(len(bounding_box) / 2)].T
   bb_upper = bounding_box[int(len(bounding_box) / 2) :].T
@@ -252,10 +251,10 @@ def rg_based_crop_to_pre_segmented_lobes(image, seg):
   bounding_box_to_tissue = [0, 0, 0] + list(image.GetSize())
   label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
   label_shape_filter.Execute(seg)
-  bounding_box_to_lobes = label_shape_filter.GetBoundingBox(
-    1
-  )  # -1 due to binary nature of threshold
+  bounding_box_to_lobes = list(label_shape_filter.GetBoundingBox(1))
   # -The bounding box's first "dim" entries are the starting index and last "dim" entries the size
+  bounding_box_to_lobes[2] = 0
+  bounding_box_to_lobes[-1] = image.GetSize()[-1]
   roi = sitk.RegionOfInterest(
     image,
     bounding_box_to_lobes[int(len(bounding_box_to_lobes) / 2) :],
@@ -265,34 +264,6 @@ def rg_based_crop_to_pre_segmented_lobes(image, seg):
   print("bb to lobes  :", bounding_box_to_lobes)
   print("roi size is", roi.GetSize())
   return roi, bounding_box_to_tissue, bounding_box_to_lobes
-
-
-def getLargestIsland(segmentation):
-  """
-  Take binary segmentation, as sitk.Image or np.ndarray,
-  and return largest connected 'island'.
-  """
-  if type(segmentation) == sitk.Image:
-    seg_sitk = True
-    labels = label(sitk.GetArrayFromImage(segmentation).astype(np.int16)).astype(np.int16)  # -get connected component
-  else:
-    labels = label(segmentation).astype(np.int16)  # -get connected component
-
-  assert labels.max() != 0  # assume at least 1 connected component
-  # -get largest connected region (converts from True/False to 1/0)
-  largestIsland_arr = np.array(
-    labels == np.argmax(np.bincount(labels.flat)[1:]) + 1, dtype=np.int8
-  )
-  del labels
-  # -if sitk.Image input, return type sitk.Image
-  if seg_sitk:
-    largestIsland = sitk.GetImageFromArray(largestIsland_arr)
-    del largestIsland_arr
-    largestIsland.CopyInformation(segmentation)
-    return largestIsland
-  else:
-    return largestIsland_arr
-
 
 class SegmentSet(data.Dataset):
   """
@@ -325,6 +296,9 @@ class SegmentSet(data.Dataset):
     else:
       ct_scanOrig = sitk.ReadImage(self.scans_path)
     sitk.ProcessObject_SetGlobalWarningDisplay(True)
+    logger.info(f"image spacing: {ct_scanOrig.GetSpacing()}")
+    logger.info(f"image origin: {ct_scanOrig.GetOrigin()}")
+    logger.info(f"image size: {ct_scanOrig.GetSize()}")
 
     if "crop_to_lobes" in self.kwargs.keys():
         """
@@ -347,19 +321,26 @@ class SegmentSet(data.Dataset):
         bb_default = list(np.zeros(3)) + list(ct_scanOrig.GetSize())
         bounding_box_to_tissue = bb_default
         bounding_box_to_lobes = bb_default
+    if self.downsample:
+      ct_scanOrig = u.resample_image(ct_scanOrig, **self.kwargs)
+      logger.info(f"downsampled image size is {ct_scanOrig.GetSize()}")
 
+    # cropping works best if scan is multiple of 100, so we add some extra padding
+    # in z-direction to facilitate this. Padding should always be > 1
     num_z_slices = ct_scanOrig.GetSize()[2]
     num_z_ceil_100 = int(ceil(num_z_slices / 100)) * 100
-    num_z_to_pad = num_z_ceil_100 - num_z_slices - 1
+    num_z_to_pad = num_z_ceil_100 - num_z_slices
+    num_z_to_pad = max(num_z_to_pad, 0)
+    logger.info(f"try to pad {num_z_to_pad} in z-direction")
     pad = sitk.ConstantPadImageFilter()
-    pad.SetPadLowerBound((1, 1, 1))
-    pad.SetPadUpperBound((1, 1, num_z_to_pad))
+    pad.SetPadLowerBound((1, 1, 0))
+    pad.SetPadUpperBound((1, 1, int(num_z_to_pad)))
     pad.SetConstant(0)
     ct_scanOrig = pad.Execute(ct_scanOrig)
     # ct_scan=sitk.GetImageFromArray(ct_scan)
-    if self.downsample:
-      ct_scanOrig = u.resampleImage(ct_scanOrig, **self.kwargs)
-      print(f"downsampled image size is {ct_scanOrig.GetSize()}")
+    #if self.downsample:
+    #  ct_scanOrig = u.resample_image(ct_scanOrig, **self.kwargs)
+    #  print(f"downsampled image size is {ct_scanOrig.GetSize()}")
     #   half = sitk.GetArrayFromImage(half)
     (
       roi_list,
@@ -371,8 +352,13 @@ class SegmentSet(data.Dataset):
     for i, roi_i in enumerate(roi_list):
       minCutoff = -1000
       roi_i = truncate(roi_i, minCutoff, 600)
+      logger.info(f"after truncation roi {i} min voxel {roi_list[i].min()}")
+      logger.info(f"after truncation roi {i} max voxel {roi_list[i].max()}")
       roi_i = (roi_i - (minCutoff)) / 1600  # normalise HU
       roi_list[i] = roi_i
+      logger.info(f"after scaling roi {i} min voxel {roi_list[i].min()}")
+      logger.info(f"after scaling roi {i} max voxel {roi_list[i].max()}")
+
     return (
       roi_list,
       origin_list,

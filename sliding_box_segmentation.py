@@ -3,6 +3,7 @@ Split image in half with plane in X-direction. Segment each half with UNet then 
 
 """
 import argparse
+import logging
 import numpy as np
 from copy import copy
 import hjson
@@ -18,13 +19,20 @@ from os import mkdir
 from distutils.util import strtobool
 import vedo as v
 
+if __name__ == "__main__":
+  logging.basicConfig(
+    filename="log_sliding_box_segmentation.log",
+    filemode="a",
+    format="%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+    level=logging.DEBUG,
+  )
+  logger = logging.getLogger(__name__)
+
+
 from cleanup_tools import CleanupTools
 import model
 from data import *
-
-with open("config.json") as f:
-  config = hjson.load(f)
-
 
 def get_inputs():
   parser = argparse.ArgumentParser(description=__doc__)
@@ -34,6 +42,13 @@ def get_inputs():
     required=True,
     type=str,
     help="input image to segment /path/to/ct/*.mhd or /path/to/dicom/",
+  )
+  parser.add_argument(
+    "-c",
+    "--config_file",
+    default="config.json",
+    type=str,
+    help="configuration json file /path/to/config.json [default config.json]",
   )
   parser.add_argument(
     "-wd",
@@ -60,6 +75,15 @@ def get_inputs():
 
 
 args = get_inputs()
+with open(args.config_file) as f:
+  config = hjson.load(f)
+segID = config["segment3d"]["output_id"]
+
+logging.getLogger("matplotlib.font_manager").disabled = True
+
+logger.info(f"config {config}")
+logger.info(f"argparser: {args}")
+logger.info(f"data will be written to e.g.: {args.write_dir}/seg-{segID}-airway.mhd")
 
 device = torch.device("cpu")
 

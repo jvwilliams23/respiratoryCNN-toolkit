@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import nrrd, os, scipy.ndimage
 from glob import glob
@@ -11,6 +12,7 @@ from skimage.measure import label, regionprops
 from . import utils as u
 import vedo as v
 
+logger = logging.getLogger(__name__)
 
 def truncate(image, min_bound, max_bound):
   image[image < min_bound] = min_bound
@@ -68,9 +70,6 @@ def sliding_window_crop(image, num_boxes=5, crop_dir=2, overlap=2):
   # vp.show()
   # exit()
   print("sitk image shape", image.GetSize())
-  print(
-    f"np array shape {image_arr.shape}, min {image_arr.min()}, max {image_arr.max()}"
-  )
 
   bb_lower = bounding_box[0 : int(len(bounding_box) / 2)].T
   bb_upper = bounding_box[int(len(bounding_box) / 2) :].T
@@ -325,6 +324,9 @@ class SegmentSet(data.Dataset):
     else:
       ct_scanOrig = sitk.ReadImage(self.scans_path)
     sitk.ProcessObject_SetGlobalWarningDisplay(True)
+    logger.info(f"image spacing: {ct_scanOrig.GetSpacing()}")
+    logger.info(f"image origin: {ct_scanOrig.GetOrigin()}")
+    logger.info(f"image size: {ct_scanOrig.GetSize()}")
 
     if "crop_to_lobes" in self.kwargs.keys():
         """
@@ -349,9 +351,10 @@ class SegmentSet(data.Dataset):
         bounding_box_to_lobes = bb_default
     if self.downsample:
       ct_scanOrig = u.resample_image(ct_scanOrig, **self.kwargs)
-      print(f"downsampled image size is {ct_scanOrig.GetSize()}")
+      logger.info(f"downsampled image size is {ct_scanOrig.GetSize()}")
 
-
+    # cropping works best if scan is multiple of 100, so we add some extra padding
+    # in z-direction to facilitate this. Padding should always be > 1
     num_z_slices = ct_scanOrig.GetSize()[2]
     num_z_ceil_100 = int(ceil(num_z_slices / 100)) * 100
     num_z_to_pad = num_z_ceil_100 - num_z_slices - 1
@@ -375,8 +378,13 @@ class SegmentSet(data.Dataset):
     for i, roi_i in enumerate(roi_list):
       minCutoff = -1000
       roi_i = truncate(roi_i, minCutoff, 600)
+      logger.info(f"after truncation roi {i} min voxel {roi_list[i].min()}")
+      logger.info(f"after truncation roi {i} max voxel {roi_list[i].max()}")
       roi_i = (roi_i - (minCutoff)) / 1600  # normalise HU
       roi_list[i] = roi_i
+      logger.info(f"after scaling roi {i} min voxel {roi_list[i].min()}")
+      logger.info(f"after scaling roi {i} max voxel {roi_list[i].max()}")
+
     return (
       roi_list,
       origin_list,

@@ -253,8 +253,6 @@ def rg_based_crop_to_pre_segmented_lobes(image, seg):
   label_shape_filter.Execute(seg)
   bounding_box_to_lobes = list(label_shape_filter.GetBoundingBox(1))
   # -The bounding box's first "dim" entries are the starting index and last "dim" entries the size
-  bounding_box_to_lobes[2] = 0
-  bounding_box_to_lobes[-1] = image.GetSize()[-1]
   roi = sitk.RegionOfInterest(
     image,
     bounding_box_to_lobes[int(len(bounding_box_to_lobes) / 2) :],

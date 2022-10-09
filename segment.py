@@ -21,6 +21,13 @@ def inputs():
     help="input image to segment /path/to/ct/*.mhd or /path/to/dicom/",
   )
   parser.add_argument(
+    "-c",
+    "--config_file",
+    default="config.json",
+    type=str,
+    help="configuration json file /path/to/config.json [default config.json]",
+  )
+  parser.add_argument(
     "-o",
     "--output_surface",
     default="seg-1.stl",
@@ -33,7 +40,7 @@ def inputs():
 
 args = inputs()
 
-with open("config.json") as f:
+with open(args.config_file) as f:
   config = hjson.load(f)
 
 device = torch.device("cpu")
@@ -72,7 +79,9 @@ for l, label in enumerate([1]):
   # pad.SetPadUpperBound((1, 1, 1))
   # pad.SetConstant(0)
   # segmentation[l] = pad.Execute(segmentation[l])
-  sitk.WriteImage(sitk.GetImageFromArray(segmentation[l]), args.output_surface.replace(".stl", ".mhd"), True)
+  image_to_write = sitk.GetImageFromArray(segmentation[l].T)
+  image_to_write.CopyInformation(X_orig)
+  sitk.WriteImage(image_to_write, args.output_surface.replace(".stl", ".mhd"), True)
 
   vol = v.Volume(
     np.pad(segmentation[l].T, 1),

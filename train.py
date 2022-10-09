@@ -7,6 +7,7 @@ import hjson
 #import imgaug.augmenters as iaa
 import matplotlib.pyplot as plt
 import numpy as np
+from pandas import read_csv
 import torch
 import torch.optim as optim
 import torchio as tio
@@ -19,6 +20,13 @@ from model import UNet
 
 def get_inputs():
   parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument(
+    "-c",
+    "--config_file",
+    default="trainconfig.json",
+    type=str,
+    help="configuration json file /path/to/config.json [default config.json]",
+  )
   parser.add_argument(
     "-r",
     "--resume_training",
@@ -39,26 +47,16 @@ def convert_text_to_filenames(file_string):
   image_names (list of str): all strings with path to image
   label_names (list of str): all strings with path to label
   """
-  with open(file_string, "r") as f:
-    all_cases = f.readlines()
-
-  image_file_list = []
-  label_file_list = []
-  for case_row in all_cases:
-    removed_newline = case_row.replace("\n", "")
-    # print(removed_newline)
-    # check if string is empty (meaning no line in file)
-    if removed_newline.__eq__(""):
-      continue
-    image_file_list.append(removed_newline.split()[0])
-    label_file_list.append(removed_newline.split()[1])
+  df = read_csv(file_string, header=None, delim_whitespace=True)
+  image_file_list = list(df[0])
+  label_file_list = list(df[1])
   return image_file_list, label_file_list
 
 args = get_inputs()
 torch.backends.cudnn.benchmark = True
 
 # -Open and load configurations.
-with open("trainconfig.json") as f:
+with open(args.config_file) as f:
   config = hjson.load(f)
 
 device = torch.device("cpu")

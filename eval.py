@@ -26,12 +26,19 @@ def get_inputs():
     type=str,
     help="directory where trained model is stored",
   )
+  parser.add_argument(
+    "-c",
+    "--config_file",
+    default="config.json",
+    type=str,
+    help="configuration json file /path/to/config.json [default config.json]",
+  )
   return parser.parse_args()
 
-with open("trainconfig.json") as f:
-  config = json.load(f)
-
 args = get_inputs()
+
+with open(args.config_file) as f:
+  config = json.load(f)
 
 device = torch.device("cpu")
 

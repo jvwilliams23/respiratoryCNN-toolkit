@@ -26,7 +26,7 @@
         // number of samples in training set
         "train_size" : 40,
         // number of samples in validation set
-        "validation_size" : 10,
+        "validation_size" : 0.2,
         // number of classes (2 = foreground + background)
         "n_classes" : 2,
         // number of artificial/augmented datasets to create in training

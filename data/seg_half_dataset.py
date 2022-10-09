@@ -280,20 +280,7 @@ class SegmentSet(data.Dataset):
   def __getitem__(self):
 
     # load scan and mask
-    sitk.ProcessObject_SetGlobalWarningDisplay(False)
-    series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(self.scans_path)
-    if series_IDs:  # -Sanity check
-      series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(
-        self.scans_path, series_IDs[0]
-      )
-      series_reader = sitk.ImageSeriesReader()
-      series_reader.SetFileNames(series_file_names)
-      # Configure the reader to load all of the DICOM tags (public+private).
-      series_reader.MetaDataDictionaryArrayUpdateOn()
-      ct_scanOrig = series_reader.Execute()  # -Get images
-    else:
-      ct_scanOrig = sitk.ReadImage(self.scans_path)
-    sitk.ProcessObject_SetGlobalWarningDisplay(True)
+    ct_scanOrig = u.read_image(self.scans_path)    
     logger.info(f"image spacing: {ct_scanOrig.GetSpacing()}")
     logger.info(f"image origin: {ct_scanOrig.GetOrigin()}")
     logger.info(f"image size: {ct_scanOrig.GetSize()}")

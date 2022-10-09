@@ -89,8 +89,8 @@ class Dataset(data.Dataset):
   def __getitem__(self, index):
 
     #load scan and mask
-    ct_scan, ct_orig, ct_space = utils.load_itk(self.scans_path[index])
-    seg_mask, seg_orig, seg_space = utils.load_itk(self.labels_path[index])
+    ct_scan = utils.read_image(self.scans_path[index])
+    seg_mask = utils.read_image(self.labels_path[index])
 
     if self.n_classes == 5 or self.n_classes == 6:
       seg_mask[seg_mask == 0] = 0

@@ -169,8 +169,8 @@ class SegmentSet(data.Dataset):
   def __getitem__(self):
 
     #load scan and mask
-    ct_scan, ct_orig, ct_space = utils.load_itk(self.scans_path)
-    ct_scanOrig = sitk.ReadImage(self.scans_path)
+    ct_scan = utils.read_image(self.scans_path)
+    ct_scanOrig = utils.read_image(self.scans_path)
 
     #ct_scan=sitk.GetImageFromArray(ct_scan)
     #ct_scan=resampleImage(ct_scanOrig, self.scan_size)

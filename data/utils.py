@@ -7,8 +7,80 @@ import vtk
 import vedo as v
 from skimage.measure import label
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
+
+def overlay_seed_on_image(image, seedPoint):
+  """Copies properties of base image to allow for visualising a seed point,
+  relative to the domain."""
+  seedDepth = seedPoint[2]
+  tempImg = sitk.Image(image.GetSize(), sitk.sitkUInt8)
+  tempImg.CopyInformation(
+    image
+  )  # copies information from img to avoid overwriting when showing seed
+  print(
+    "image size",
+    image.GetSize(),
+    "seed pos",
+    seedPoint,
+    "temp image size",
+    tempImg.GetSize(),
+  )
+  tempImg[seedPoint] = 1  # Sets the seed to 1 on the labelmap
+  tempImg = sitk.BinaryDilate(
+    tempImg, 3
+  )  # dilates label (in this case, seed) by X pixels (3 here).
+  myshow(sitk.LabelOverlay(image, tempImg), seedDepth, title="Initial Seed")
+  del tempImg
+  return None
+
+def myshow(img, zpos="default", title=None, margin=0.05, dpi=80):
+    nda = sitk.GetArrayFromImage(img)
+    spacing = img.GetSpacing()
+    if zpos=="default":
+        zpos=nda.shape[0] // 2
+    print(zpos)
+
+    if nda.ndim == 3:
+        # fastest dim, either component or x
+        c = nda.shape[-1]
+
+        # the the number of components is 3 or 4 consider it an RGB image
+        if c not in (3, 4):
+            nda = nda[zpos, :, :]
+
+    elif nda.ndim == 4:
+        c = nda.shape[-1]
+
+        if c not in (3, 4):
+            raise RuntimeError("Unable to show 3D-vector Image")
+
+        # take a z-slice
+        nda = nda[zpos, :, :, :]
+
+    xsize = nda.shape[1]
+    ysize = nda.shape[0]
+
+    # Make a figure big enough to accommodate an axis of xpixels by ypixels
+    # as well as the ticklabels, etc...
+    figsize = (1 + margin) * xsize / dpi, (1 + margin) * ysize / dpi
+
+    plt.figure(figsize=figsize, dpi=dpi, tight_layout=True)
+    ax = plt.gca()
+
+    extent = (0, xsize * spacing[0], ysize * spacing[1], 0)
+
+    t = ax.imshow(nda, extent=extent, interpolation=None)
+
+    if nda.ndim == 2:
+        t.set_cmap("gray")
+
+    if(title):
+        plt.title(title)
+
+    plt.show()
+
 
 def convert_text_to_filenames(file_string):
   """
@@ -36,6 +108,23 @@ def convert_text_to_filenames(file_string):
     label_file_list.append(removed_newline.split()[1])
   return image_file_list, label_file_list
 
+def read_image(path_to_read):
+  # load scan and mask
+  sitk.ProcessObject_SetGlobalWarningDisplay(False)
+  series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(path_to_read)
+  if series_IDs:  # -Sanity check
+    series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(
+      self.scans_path, series_IDs[0]
+    )
+    series_reader = sitk.ImageSeriesReader()
+    series_reader.SetFileNames(series_file_names)
+    # Configure the reader to load all of the DICOM tags (public+private).
+    series_reader.MetaDataDictionaryArrayUpdateOn()
+    image = series_reader.Execute()  # -Get images
+  else:
+    image = sitk.ReadImage(path_to_read)
+  sitk.ProcessObject_SetGlobalWarningDisplay(True)
+  return image
 
 class EarlyStopping:
     """Early stops the training if validation loss doesn't improve after a given patience."""

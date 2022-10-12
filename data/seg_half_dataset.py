@@ -14,18 +14,22 @@ import vedo as v
 
 logger = logging.getLogger(__name__)
 
+
 def truncate(image, min_bound, max_bound):
   image[image < min_bound] = min_bound
   image[image > max_bound] = max_bound
   return image
+
 
 def visualise_bb(arr, spacing, origin):
   return v.Volume(arr, origin=origin, spacing=spacing).legosurface(
     vmin=0.5, vmax=1
   )
 
+
 def numpy_to_ints(arr):
   return [int(arr[0]), int(arr[1]), int(arr[2])]
+
 
 def is_integer(n):
   try:
@@ -34,6 +38,7 @@ def is_integer(n):
     return False
   else:
     return float(n).is_integer()
+
 
 def sliding_window_crop(image, num_boxes=5, crop_dir=2, overlap=2):
   """
@@ -254,32 +259,37 @@ class SegmentSet(data.Dataset):
   def __getitem__(self):
 
     # load scan and mask
-    ct_scanOrig = u.read_image(self.scans_path)    
+    ct_scanOrig = u.read_image(self.scans_path)
     logger.info(f"image spacing: {ct_scanOrig.GetSpacing()}")
     logger.info(f"image origin: {ct_scanOrig.GetOrigin()}")
     logger.info(f"image size: {ct_scanOrig.GetSize()}")
 
     if "crop_to_lobes" in self.kwargs.keys():
-        """
-        (
-          ct_scanOrig,
-          bounding_box_to_tissue,
-          bounding_box_to_lobes,
-        ) = rg_based_crop_for_cnn(ct_scanOrig)
-        """
-        assert np.all(np.array(ct_scanOrig.GetSize()) == np.array(self.kwargs["lobe_seg"].GetSize())), (
-          "shape of img and segmentation do not match "
-          f"{ct_scanOrig.GetSize()} != {self.kwargs['lobe_seg'].GetSize()}"
-        )
-        (
-          ct_scanOrig,
-          bounding_box_to_tissue,
-          bounding_box_to_lobes,
-        ) = rg_based_crop_to_pre_segmented_lobes(ct_scanOrig, self.kwargs["lobe_seg"])
+      """
+      (
+        ct_scanOrig,
+        bounding_box_to_tissue,
+        bounding_box_to_lobes,
+      ) = rg_based_crop_for_cnn(ct_scanOrig)
+      """
+      assert np.all(
+        np.array(ct_scanOrig.GetSize())
+        == np.array(self.kwargs["lobe_seg"].GetSize())
+      ), (
+        "shape of img and segmentation do not match "
+        f"{ct_scanOrig.GetSize()} != {self.kwargs['lobe_seg'].GetSize()}"
+      )
+      (
+        ct_scanOrig,
+        bounding_box_to_tissue,
+        bounding_box_to_lobes,
+      ) = u.rg_based_crop_to_pre_segmented_lobes(
+        ct_scanOrig, self.kwargs["lobe_seg"]
+      )
     else:
-        bb_default = list(np.zeros(3)) + list(ct_scanOrig.GetSize())
-        bounding_box_to_tissue = bb_default
-        bounding_box_to_lobes = bb_default
+      bb_default = list(np.zeros(3)) + list(ct_scanOrig.GetSize())
+      bounding_box_to_tissue = bb_default
+      bounding_box_to_lobes = bb_default
     if self.downsample:
       ct_scanOrig = u.resample_image(ct_scanOrig, **self.kwargs)
       logger.info(f"downsampled image size is {ct_scanOrig.GetSize()}")
@@ -297,7 +307,7 @@ class SegmentSet(data.Dataset):
     pad.SetConstant(0)
     ct_scanOrig = pad.Execute(ct_scanOrig)
     # ct_scan=sitk.GetImageFromArray(ct_scan)
-    #if self.downsample:
+    # if self.downsample:
     #  ct_scanOrig = u.resample_image(ct_scanOrig, **self.kwargs)
     #  print(f"downsampled image size is {ct_scanOrig.GetSize()}")
     #   half = sitk.GetArrayFromImage(half)

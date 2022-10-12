@@ -119,15 +119,6 @@ segmentation = [None] * len([1])
 for l, label in enumerate([1]):
   segmentation[l] = utils.extract_largest_island(labelMap)
 
-  # get metadata from original ct dataset
-  # segmentation[l].SetOrigin(X_orig.GetOrigin())
-  # segmentation[l].SetSpacing(X_orig.GetSpacing())
-  # add extra layer of voxels to make closed surface
-  # pad = sitk.ConstantPadImageFilter()
-  # pad.SetPadLowerBound((1, 1, 1))
-  # pad.SetPadUpperBound((1, 1, 1))
-  # pad.SetConstant(0)
-  # segmentation[l] = pad.Execute(segmentation[l])
   image_to_write = sitk.GetImageFromArray(segmentation[l].T)
   image_to_write.CopyInformation(X_orig)
   sitk.WriteImage(image_to_write, args.output_surface.replace(".stl", ".mhd"), True)

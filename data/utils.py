@@ -11,121 +11,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-def overlay_seed_on_image(image, seedPoint):
-  """Copies properties of base image to allow for visualising a seed point,
-  relative to the domain."""
-  seedDepth = seedPoint[2]
-  tempImg = sitk.Image(image.GetSize(), sitk.sitkUInt8)
-  tempImg.CopyInformation(
-    image
-  )  # copies information from img to avoid overwriting when showing seed
-  print(
-    "image size",
-    image.GetSize(),
-    "seed pos",
-    seedPoint,
-    "temp image size",
-    tempImg.GetSize(),
-  )
-  tempImg[seedPoint] = 1  # Sets the seed to 1 on the labelmap
-  tempImg = sitk.BinaryDilate(
-    tempImg, 3
-  )  # dilates label (in this case, seed) by X pixels (3 here).
-  myshow(sitk.LabelOverlay(image, tempImg), seedDepth, title="Initial Seed")
-  del tempImg
-  return None
-
-def myshow(img, zpos="default", title=None, margin=0.05, dpi=80):
-    nda = sitk.GetArrayFromImage(img)
-    spacing = img.GetSpacing()
-    if zpos=="default":
-        zpos=nda.shape[0] // 2
-    print(zpos)
-
-    if nda.ndim == 3:
-        # fastest dim, either component or x
-        c = nda.shape[-1]
-
-        # the the number of components is 3 or 4 consider it an RGB image
-        if c not in (3, 4):
-            nda = nda[zpos, :, :]
-
-    elif nda.ndim == 4:
-        c = nda.shape[-1]
-
-        if c not in (3, 4):
-            raise RuntimeError("Unable to show 3D-vector Image")
-
-        # take a z-slice
-        nda = nda[zpos, :, :, :]
-
-    xsize = nda.shape[1]
-    ysize = nda.shape[0]
-
-    # Make a figure big enough to accommodate an axis of xpixels by ypixels
-    # as well as the ticklabels, etc...
-    figsize = (1 + margin) * xsize / dpi, (1 + margin) * ysize / dpi
-
-    plt.figure(figsize=figsize, dpi=dpi, tight_layout=True)
-    ax = plt.gca()
-
-    extent = (0, xsize * spacing[0], ysize * spacing[1], 0)
-
-    t = ax.imshow(nda, extent=extent, interpolation=None)
-
-    if nda.ndim == 2:
-        t.set_cmap("gray")
-
-    if(title):
-        plt.title(title)
-
-    plt.show()
-
-
-def convert_text_to_filenames(file_string):
-  """
-  read a tabular txt file formatted as follows:
-    /path/to/image1 /path/to/label1
-    /path/to/image2 /path/to/label2
- 
-  Output
-  ------
-  image_names (list of str): all strings with path to image
-  label_names (list of str): all strings with path to label
-  """
-  with open(file_string, "r") as f:
-    all_cases = f.readlines()
-
-  image_file_list = []
-  label_file_list = []
-  for case_row in all_cases:
-    removed_newline = case_row.replace("\n", "")
-    # print(removed_newline)
-    # check if string is empty (meaning no line in file)
-    if removed_newline.__eq__(""):
-      continue
-    image_file_list.append(removed_newline.split()[0])
-    label_file_list.append(removed_newline.split()[1])
-  return image_file_list, label_file_list
-
-def read_image(path_to_read):
-  # load scan and mask
-  sitk.ProcessObject_SetGlobalWarningDisplay(False)
-  series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(path_to_read)
-  if series_IDs:  # -Sanity check
-    series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(
-      self.scans_path, series_IDs[0]
-    )
-    series_reader = sitk.ImageSeriesReader()
-    series_reader.SetFileNames(series_file_names)
-    # Configure the reader to load all of the DICOM tags (public+private).
-    series_reader.MetaDataDictionaryArrayUpdateOn()
-    image = series_reader.Execute()  # -Get images
-  else:
-    image = sitk.ReadImage(path_to_read)
-  sitk.ProcessObject_SetGlobalWarningDisplay(True)
-  return image
-
 class EarlyStopping:
     """Early stops the training if validation loss doesn't improve after a given patience."""
     def __init__(self, patience=7, verbose=False, delta=0, path='checkpoint.pt', trace_func=print):
@@ -176,44 +61,90 @@ class EarlyStopping:
         self.val_loss_min = val_loss
 
 
-def np_to_ints(arr):
-  return [int(a) for a in arr]
-
-# Not sure if works for all format (Tested only on mhd/zraw format)
-def load_itk(filename):
-  itkimage = sitk.ReadImage(filename)
-  ct_scan = sitk.GetArrayFromImage(itkimage)
-  origin = np.array(list(reversed(itkimage.GetOrigin())))
-  spacing = np.array(list(reversed(itkimage.GetSpacing())))
-  return ct_scan, origin, spacing
-
-def rg_based_crop(image):
+# put I/O functions first, then general processing ones
+def convert_text_to_filenames(file_string):
   """
-  Use a connected-threshold estimator to separate background and foreground.
-  Then crop the image using the foreground's axis aligned bounding box.
-  Parameters
-  ----------
-  image (SimpleITK image): An image where the anatomy and background intensities form a bi-modal distribution
-                               (the assumption underlying Otsu's method.)
-  Return
+  read a tabular txt file formatted as follows:
+    /path/to/image1 /path/to/label1
+    /path/to/image2 /path/to/label2
+ 
+  Output
   ------
-  Cropped image based on foreground's axis aligned bounding box.
+  image_names (list of str): all strings with path to image
+  label_names (list of str): all strings with path to label
   """
-  # Set pixels that are in [min_intensity,otsu_threshold] to inside_value, values above otsu_threshold are
-  # set to outside_value. The anatomy has higher intensity values than the background, so it is outside.
+  df = read_csv(file_string, header=None, delim_whitespace=True)
+  image_file_list = list(df[0])
+  label_file_list = list(df[1])
+  return image_file_list, label_file_list
 
-  label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
-  label_shape_filter.Execute(image)
-  bounding_box = label_shape_filter.GetBoundingBox(
-    1
-  )  # -1 due to binary nature of threshold
-  # -The bounding box's first "dim" entries are the starting index and last "dim" entries the size
-  roi = sitk.RegionOfInterest(
-    image,
-    bounding_box[int(len(bounding_box) / 2) :],
-    bounding_box[0 : int(len(bounding_box) / 2)],
+
+def read_image(path_to_read):
+  # load scan and mask
+  sitk.ProcessObject_SetGlobalWarningDisplay(False)
+  series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(path_to_read)
+  if series_IDs:  # -Sanity check
+    series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(
+      self.scans_path, series_IDs[0]
+    )
+    series_reader = sitk.ImageSeriesReader()
+    series_reader.SetFileNames(series_file_names)
+    # Configure the reader to load all of the DICOM tags (public+private).
+    series_reader.MetaDataDictionaryArrayUpdateOn()
+    image = series_reader.Execute()  # -Get images
+  else:
+    image = sitk.ReadImage(path_to_read)
+  sitk.ProcessObject_SetGlobalWarningDisplay(True)
+  return image
+
+def dice_loss(output, labels, label):
+  print("label is", label)
+  with torch.no_grad():
+    output[output != label] = 0
+    output[output == label] = 1
+    labels[labels != label] = 0
+    labels[labels == label] = 1
+  print("labels are", labels)
+  num = 2.0 * torch.sum(output * labels)
+  # print("intersecting", num)
+  denom = torch.sum(output == 1) + torch.sum(
+    labels == 1
+  )  # torch.sum(logits**2 + labels**2)
+  # print("total volume", denom)
+  print("dice coeff", 1 - torch.true_divide(num, denom))
+  return 1 - torch.true_divide(num, denom)
+
+def extract_largest_island(segmentation):
+  """Take binary segmentation, as sitk.Image or np.ndarray, and return largest
+  connected 'island'."""
+  seg_sitk = False
+  if type(segmentation) == sitk.Image:
+    seg_sitk = True
+    segOrig = copy(segmentation)
+    # logger.info("extract_largest_island, changing sitk.Image to array")
+    segmentation = sitk.GetArrayFromImage(segmentation).astype(np.int16)
+
+  tot_voxel_num = segmentation.size
+  labels = label(segmentation)#.astype(np.int8)  # -get connected component
+  assert labels.max() != 0  # assume at least 1 connected component
+  # -get largest connected region (converts from True/False to 1/0)
+  unique_labels = np.array(np.unique(labels.flat, return_counts=True))
+  #print("unique labels are")
+  #print(unique_labels)
+  #max_label = unique_labels[0][unique_labels[1].argmax()]
+  max_label = unique_labels[0][np.argsort(unique_labels[1], axis=0)[-2]]
+  #max_label = np.argmax(np.bincount(labels.flat)[1:]) + 1
+  #print("max label is ", max_label)
+  largestIsland = np.array(
+    labels == max_label, dtype=np.int8
   )
-  return roi
+  largestIsland_vox_num = largestIsland.sum()
+  #print("island to total volume ratio", largestIsland_vox_num / tot_voxel_num)
+  # -if sitk.Image input, return type sitk.Image
+  if seg_sitk:
+    largestIsland = sitk.GetImageFromArray(largestIsland)
+    largestIsland.CopyInformation(segOrig)
+  return largestIsland
 
 def lossTang2019(logits, labels, label, eps=1e-7, gamma=5.0):
   """
@@ -255,133 +186,82 @@ def lossTang2019(logits, labels, label, eps=1e-7, gamma=5.0):
     torch.float16
   )  # 1 - torch.mean(num / (denom + eps))
 
+def myshow(img, zpos="default", title=None, margin=0.05, dpi=80):
+  nda = sitk.GetArrayFromImage(img)
+  spacing = img.GetSpacing()
+  if zpos=="default":
+      zpos=nda.shape[0] // 2
+  print(zpos)
 
-def dice_loss_old(logits, labels, label, eps=1e-7):
-  """
-  logits, labels, shape : [B, 1, Y, X]
-  """
-  x = torch.where(
-    labels == label, torch.ones(labels.shape), torch.zeros(labels.shape)
-  )
+  if nda.ndim == 3:
+      # fastest dim, either component or x
+      c = nda.shape[-1]
 
-  num = 2.0 * torch.sum(logits * x)
-  denom = torch.sum(logits ** 2.0 + x ** 2.0)
-  return 1 - torch.mean(num / (denom + eps))
+      # the the number of components is 3 or 4 consider it an RGB image
+      if c not in (3, 4):
+          nda = nda[zpos, :, :]
 
+  elif nda.ndim == 4:
+      c = nda.shape[-1]
 
-def dice(p, labels, label):
-  x = torch.where(
-    labels == label, torch.ones(labels.shape), torch.zeros(labels.shape)
-  )
+      if c not in (3, 4):
+          raise RuntimeError("Unable to show 3D-vector Image")
 
-  numDice = torch.sum(p * x)
-  denomDice = torch.sum((p * x) + ((1 - p) * x) + (p * (1 - x)))
-  tmpDice = numDice / denomDice
-  L_dice = 1 - tmpDice  # torch.sum(tmpDice)
+      # take a z-slice
+      nda = nda[zpos, :, :, :]
 
-  del x
-  return tmpDice
+  xsize = nda.shape[1]
+  ysize = nda.shape[0]
 
+  # Make a figure big enough to accommodate an axis of xpixels by ypixels
+  # as well as the ticklabels, etc...
+  figsize = (1 + margin) * xsize / dpi, (1 + margin) * ysize / dpi
 
-def dice_loss(output, labels, label):
-  print("label is", label)
-  with torch.no_grad():
-    output[output != label] = 0
-    output[output == label] = 1
-    labels[labels != label] = 0
-    labels[labels == label] = 1
-  print("labels are", labels)
-  num = 2.0 * torch.sum(output * labels)
-  # print("intersecting", num)
-  denom = torch.sum(output == 1) + torch.sum(
-    labels == 1
-  )  # torch.sum(logits**2 + labels**2)
-  # print("total volume", denom)
-  print("dice coeff", 1 - torch.true_divide(num, denom))
-  return 1 - torch.true_divide(num, denom)
+  plt.figure(figsize=figsize, dpi=dpi, tight_layout=True)
+  ax = plt.gca()
 
+  extent = (0, xsize * spacing[0], ysize * spacing[1], 0)
 
-# def dice_loss(output, labels, label):
+  t = ax.imshow(nda, extent=extent, interpolation=None)
 
-#    logits, labels, shape : [B, 1, Y, X]
-#
-#
-#  num = 2. * torch.sum((output==label)==(labels==label))
-#  print("intersecting", num)
-#  denom = torch.sum(output==label)+torch.sum(labels==label) #torch.sum(logits**2 + labels**2)
-#  print("total volume", denom)
-#  print("dice coeff", 1 - torch.true_divide(num, denom))
-#  return 1 - torch.true_divide(num, denom )
+  if nda.ndim == 2:
+      t.set_cmap("gray")
 
+  if(title):
+      plt.title(title)
 
-def compute_dice_coefficient_np(mask_pred, mask_gt):
-  """Computes soerensen-dice coefficient.
-
-  compute the soerensen-dice coefficient between the ground truth mask `mask_gt`
-  and the predicted mask `mask_pred`.
-
-  Args:
-    mask_gt: 3-dim Numpy array of type bool. The ground truth mask.
-    mask_pred: 3-dim Numpy array of type bool. The predicted mask.
-
-  Returns:
-    the dice coeffcient as float. If both masks are empty, the result is NaN.
-  """
-  mask_gt = np.array(mask_gt)
-  mask_pred = np.array(mask_pred)
-  labels = np.unique(mask_gt)
-  labels = np.delete(labels, np.where(labels == 0))
-  dice = np.zeros(len(labels))
-  for i, label in enumerate(labels):
-
-    volume_sum = (
-      np.array(mask_gt == label).sum() + np.array(mask_pred == label).sum()
-    )
-    if volume_sum == 0:
-      dice[i] = 0
-      continue
-    volume_intersect = (
-      np.array(mask_gt == label) & np.array(mask_pred == label)
-    ).sum()
-    dice[i] = 2 * volume_intersect / volume_sum
-
-  return torch.mean(1 - torch.from_numpy(dice))
-
-def extract_largest_island(segmentation):
-  """Take binary segmentation, as sitk.Image or np.ndarray, and return largest
-  connected 'island'."""
-  seg_sitk = False
-  if type(segmentation) == sitk.Image:
-    seg_sitk = True
-    segOrig = copy(segmentation)
-    # logger.info("extract_largest_island, changing sitk.Image to array")
-    segmentation = sitk.GetArrayFromImage(segmentation).astype(np.int16)
-
-  tot_voxel_num = segmentation.size
-  labels = label(segmentation)#.astype(np.int8)  # -get connected component
-  assert labels.max() != 0  # assume at least 1 connected component
-  # -get largest connected region (converts from True/False to 1/0)
-  unique_labels = np.array(np.unique(labels.flat, return_counts=True))
-  #print("unique labels are")
-  #print(unique_labels)
-  #max_label = unique_labels[0][unique_labels[1].argmax()]
-  max_label = unique_labels[0][np.argsort(unique_labels[1], axis=0)[-2]]
-  #max_label = np.argmax(np.bincount(labels.flat)[1:]) + 1
-  #print("max label is ", max_label)
-  largestIsland = np.array(
-    labels == max_label, dtype=np.int8
-  )
-  largestIsland_vox_num = largestIsland.sum()
-  #print("island to total volume ratio", largestIsland_vox_num / tot_voxel_num)
-  # -if sitk.Image input, return type sitk.Image
-  if seg_sitk:
-    largestIsland = sitk.GetImageFromArray(largestIsland)
-    largestIsland.CopyInformation(segOrig)
-  return largestIsland
+  plt.show()
 
 def numpy_to_surface(arr, spacing=[1, 1, 1], origin=[0, 0, 0], largest=True):
   vol = v.Volume(arr, spacing=spacing, origin=origin)
   return vol.isosurface(largest=largest)
+
+def np_to_ints(arr):
+  return [int(a) for a in arr]
+
+def overlay_seed_on_image(image, seedPoint):
+  """Copies properties of base image to allow for visualising a seed point,
+  relative to the domain."""
+  seedDepth = seedPoint[2]
+  tempImg = sitk.Image(image.GetSize(), sitk.sitkUInt8)
+  tempImg.CopyInformation(
+    image
+  )  # copies information from img to avoid overwriting when showing seed
+  print(
+    "image size",
+    image.GetSize(),
+    "seed pos",
+    seedPoint,
+    "temp image size",
+    tempImg.GetSize(),
+  )
+  tempImg[seedPoint] = 1  # Sets the seed to 1 on the labelmap
+  tempImg = sitk.BinaryDilate(
+    tempImg, 3
+  )  # dilates label (in this case, seed) by X pixels (3 here).
+  myshow(sitk.LabelOverlay(image, tempImg), seedDepth, title="Initial Seed")
+  del tempImg
+  return None
 
 def resample_image(imageIn, interpolator=sitk.sitkLinear, **kwargs):
   """
@@ -447,35 +327,34 @@ def resample_image(imageIn, interpolator=sitk.sitkLinear, **kwargs):
     output_direction,
   )
 
-  return resampled_image
-
-def binaryLabelToSTL(image, outputName="newairway.stl"):
+def rg_based_crop(image):
   """
-  .STL file creation from a .mhd file containing a binary label map.
-  Modification of the above code.
+  Use a connected-threshold estimator to separate background and foreground.
+  Then crop the image using the foreground's axis aligned bounding box.
+  Parameters
+  ----------
+  image (SimpleITK image): An image where the anatomy and background intensities form a bi-modal distribution
+                               (the assumption underlying Otsu's method.)
+  Return
+  ------
+  Cropped image based on foreground's axis aligned bounding box.
+  """
+  # Set pixels that are in [min_intensity,otsu_threshold] to inside_value, values above otsu_threshold are
+  # set to outside_value. The anatomy has higher intensity values than the background, so it is outside.
+
+  label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
+  label_shape_filter.Execute(image)
+  bounding_box = label_shape_filter.GetBoundingBox(
+    1
+  )  # -1 due to binary nature of threshold
+  # -The bounding box's first "dim" entries are the starting index and last "dim" entries the size
+  roi = sitk.RegionOfInterest(
+    image,
+    bounding_box[int(len(bounding_box) / 2) :],
+    bounding_box[0 : int(len(bounding_box) / 2)],
+  )
+  return roi
+
+  """
   """
 
-  filename = image
-
-  # Read the .mhd image with vtk
-  reader = vtk.vtkMetaImageReader()
-  reader.SetFileName(filename)
-  reader.Update()
-
-  # -Gets image to be surfaced
-  image = vtk.vtkImageThreshold()
-  image.SetInputConnection(reader.GetOutputPort())
-  image.Update()
-
-  # -Creates surface from binary label map
-  surface = vtk.vtkDiscreteMarchingCubes()
-  surface.SetInputConnection(image.GetOutputPort())
-  surface.GenerateValues(1, 1, 1)
-  surface.Update()
-
-  writer = vtk.vtkSTLWriter()
-  writer.SetInputConnection(surface.GetOutputPort())
-  # writer.SetFileTypeToBinary()
-  writer.SetFileName(outputName)
-  writer.Write()
-  return None

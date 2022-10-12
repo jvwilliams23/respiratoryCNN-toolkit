@@ -237,32 +237,6 @@ def rg_based_crop_for_cnn(image):
   print("bb to lobes  :", bounding_box_to_lobes)
   return roi_to_lobes, bounding_box, bounding_box_to_lobes
 
-def rg_based_crop_to_pre_segmented_lobes(image, seg):
-  """
-  Use a pre-computed lobe segmentation to crop image before segmentation
-  Parameters
-  ----------
-  image (SimpleITK image): A CT image
-  seg (SimpleITK image): A binary labelmap of the lung hull
-  Return
-  ------
-  Cropp
-  """
-  bounding_box_to_tissue = [0, 0, 0] + list(image.GetSize())
-  label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
-  label_shape_filter.Execute(seg)
-  bounding_box_to_lobes = list(label_shape_filter.GetBoundingBox(1))
-  # -The bounding box's first "dim" entries are the starting index and last "dim" entries the size
-  roi = sitk.RegionOfInterest(
-    image,
-    bounding_box_to_lobes[int(len(bounding_box_to_lobes) / 2) :],
-    bounding_box_to_lobes[0 : int(len(bounding_box_to_lobes) / 2)],
-  )
-  print("bb 1 :", bounding_box_to_tissue)
-  print("bb to lobes  :", bounding_box_to_lobes)
-  print("roi size is", roi.GetSize())
-  return roi, bounding_box_to_tissue, bounding_box_to_lobes
-
 class SegmentSet(data.Dataset):
   """
   list_scans is a list containing the filenames of scans

@@ -107,6 +107,7 @@ if crop_to_lobes:
   lobes_arr = sitk.GetArrayFromImage(lobes_seg)
   lungs_arr = np.where(lobes_arr != 0, 1, 0)
   kwargs["lobe_seg"] = sitk.GetImageFromArray(lungs_arr)
+  kwargs["lobe_seg"].CopyInformation(lobes_seg)
   # erode so that it is like cropping to airways
   kwargs["lobe_seg"] = CleanupTools.binary_erode(kwargs["lobe_seg"], 10)
   del lungs_arr, lobes_seg, lobes_arr

@@ -6,7 +6,7 @@ from torch.utils import data
 import SimpleITK as sitk
 from skimage import morphology
 from skimage.measure import label, regionprops
-from . import utils
+from . import utils as u
 
 def truncate(image, min_bound, max_bound):
     image[image < min_bound] = min_bound
@@ -158,30 +158,59 @@ class SegmentSet(data.Dataset):
     scans_path and masks_path are the paths of the folders containing the data
     mode : 2d will return slices
   """
-  def __init__(self, scans_path, crop_fraction=0.0):
+
+  def __init__(self, scans_path, crop_fraction=0.0, **kwargs):
 
     self.scans_path = scans_path
     self.crop_fraction = crop_fraction
+    self.kwargs = kwargs
 
   def __len__(self):
     return len(self.scans_path)
 
   def __getitem__(self):
 
-    #load scan and mask
-    ct_scan = utils.read_image(self.scans_path)
-    ct_scanOrig = utils.read_image(self.scans_path)
+    # load scan and mask
+    # ct_scan = u.read_image(self.scans_path)
+    ct_scanOrig = u.read_image(self.scans_path)
 
-    #ct_scan=sitk.GetImageFromArray(ct_scan)
-    #ct_scan=resampleImage(ct_scanOrig, self.scan_size)
-    #ct_scan=sitk.GetArrayFromImage(ct_scan)
-    if self.crop_fraction != 0.:
-      ct_scan = rg_based_crop_for_cnn(ct_scan, self.crop_fraction)
-    #ct_scan=sitk.GetArrayFromImage(ct_scanOrig)
+    # ct_scan=sitk.GetImageFromArray(ct_scan)
+    # ct_scan=resampleImage(ct_scanOrig, self.scan_size)
+    # ct_scan=sitk.GetArrayFromImage(ct_scan)
+
+    if "crop_to_lobes" in self.kwargs.keys():
+      assert np.all(
+        np.array(ct_scanOrig.GetSize())
+        == np.array(self.kwargs["lobe_seg"].GetSize())
+      ), (
+        "shape of img and segmentation do not match "
+        f"{ct_scanOrig.GetSize()} != {self.kwargs['lobe_seg'].GetSize()}"
+      )
+      (
+        ct_scanOrig,
+        bounding_box_to_tissue,
+        bounding_box_to_lobes,
+      ) = u.rg_based_crop_to_pre_segmented_lobes(
+        ct_scanOrig, self.kwargs["lobe_seg"]
+      )
+    else:
+      bb_default = list(np.zeros(3)) + list(ct_scanOrig.GetSize())
+      bounding_box_to_tissue = bb_default
+      bounding_box_to_lobes = bb_default
+    
+    if self.crop_fraction != 0.0:
+      ct_scanOrig = rg_based_crop_for_cnn(ct_scanOrig, self.crop_fraction)
+    
+
+    ct_scan = sitk.GetArrayFromImage(ct_scanOrig)
+    # ct_scan=sitk.GetArrayFromImage(ct_scanOrig)
     minCutoff = -1000
-    ct_scan=truncate(ct_scan, minCutoff, 600)
-    ct_scan=(ct_scan-(minCutoff)) / 1600 # normalise HU
+    ct_scan = truncate(ct_scan, minCutoff, 600)
+    ct_scan = (ct_scan - (minCutoff)) / 1600  # normalise HU
 
-    return ct_scan[np.newaxis, :], ct_scanOrig
-
-
+    return (
+      ct_scan[np.newaxis, :], 
+      ct_scanOrig,
+      bounding_box_to_tissue,
+      bounding_box_to_lobes,
+    )

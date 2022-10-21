@@ -85,7 +85,7 @@ def read_image(path_to_read):
   series_IDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(path_to_read)
   if series_IDs:  # -Sanity check
     series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(
-      self.scans_path, series_IDs[0]
+      path_to_read, series_IDs[0]
     )
     series_reader = sitk.ImageSeriesReader()
     series_reader.SetFileNames(series_file_names)
@@ -326,6 +326,7 @@ def resample_image(imageIn, interpolator=sitk.sitkLinear, **kwargs):
     output_spacing,
     output_direction,
   )
+  return resampled_image
 
 def rg_based_crop(image):
   """

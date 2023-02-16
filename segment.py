@@ -4,7 +4,6 @@ from os import mkdir
 from sys import exit
 
 import hjson
-import model
 import numpy as np
 import SimpleITK as sitk
 import torch
@@ -12,9 +11,15 @@ import vedo as v
 from cleanup_tools import CleanupTools
 from data import *
 
+from enet import ENet
+from unet import UNet
+
 
 def inputs():
-  parser = argparse.ArgumentParser(description=__doc__)
+  parser = argparse.ArgumentParser(
+    description=__doc__,
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+  )
   parser.add_argument(
     "-i",
     "--ct_path",
@@ -27,7 +32,7 @@ def inputs():
     "--config_file",
     default="config.json",
     type=str,
-    help="configuration json file /path/to/config.json [default config.json]",
+    help="configuration json file /path/to/config.json",
   )
   parser.add_argument(
     "-bd",
@@ -56,11 +61,23 @@ segID = config["segment3d"]["output_id"]
 device = torch.device("cpu")
 #mkdir("segmentations", exist_ok=True)
 
-criterion = utils.lossTang2019  # utils.dice_loss
-unet = model.UNet(
-  1, config["train3d"]["n_classes"], config["train3d"]["start_filters"]
-).to(device)
-unet.load_state_dict(torch.load("./unet-model.pt"))
+# select which model to train
+if config["train3d"]["model"].lower() == "unet":
+  print("Training UNet")
+  model = UNet(
+    1,
+    config["train3d"]["n_classes"],
+    config["train3d"]["start_filters"],
+    bilinear=False,
+  ).to(device)
+  model.load_state_dict(torch.load("./unet-model.pt"))
+elif config["train3d"]["model"].lower() == "enet":
+  print("Training ENet")
+  model = ENet(config["train3d"]["n_classes"]).to(device)
+  model.load_state_dict(torch.load("./enet-model.pt"))
+else:
+  print("Unrecognised model. Exiting.")
+  exit()
 
 kwargs = {}
 try:
@@ -111,7 +128,7 @@ np.savetxt(
 
 # format data to be read by NN
 X = torch.Tensor(np.array([X.astype(np.float16)])).to(device)  # scan
-logits = unet(X)
+logits = model(X)
 labelMap = torch.max(logits[0], 0)[1].numpy()
 labelMap = np.swapaxes(labelMap, 0, 2)
 

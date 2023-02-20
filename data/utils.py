@@ -146,6 +146,17 @@ def extract_largest_island(segmentation):
     largestIsland.CopyInformation(segOrig)
   return largestIsland
 
+def fill_holes(image_in, kernel_width=1):
+  """Fills together holes in binary label map to eliminate grainy thresholds
+  impact on object detection.
+  """
+  closing_filter = sitk.BinaryMorphologicalClosingImageFilter()
+  closing_filter.SetKernelRadius(kernel_width)
+  # Set kernel shape to ball
+  closing_filter.SetKernelType(2)
+  return closing_filter.Execute(image_in) 
+
+
 def lossTang2019(logits, labels, label, eps=1e-7, gamma=5.0):
   """
   logits, labels, shape : [B, 1, Y, X]

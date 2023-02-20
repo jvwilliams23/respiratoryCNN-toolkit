@@ -8,9 +8,8 @@ import numpy as np
 import SimpleITK as sitk
 import torch
 import vedo as v
-from cleanup_tools import CleanupTools
-from data import *
 
+from data import *
 from enet import ENet
 from unet import UNet
 
@@ -89,14 +88,13 @@ if crop_to_lobes:
   print(f"Reading lobes file {config['segment3d']['lobes_dir']}")
   lobes_file = glob(config["segment3d"]["lobes_dir"])[0]
   print(f"glob finds: {glob(config['segment3d']['lobes_dir'])}")
-  # kwargs["lobe_seg"] = config["segment3d"]["lobes_dir"]
   lobes_seg = sitk.ReadImage(lobes_file)
   lobes_arr = sitk.GetArrayFromImage(lobes_seg)
   lungs_arr = np.where(lobes_arr != 0, 1, 0)
   kwargs["lobe_seg"] = sitk.GetImageFromArray(lungs_arr)
   kwargs["lobe_seg"].CopyInformation(lobes_seg)
   # erode so that it is like cropping to airways
-  kwargs["lobe_seg"] = CleanupTools.binary_erode(kwargs["lobe_seg"], 10)
+  kwargs["lobe_seg"] = utils.binary_erode(kwargs["lobe_seg"], 10)
   del lungs_arr, lobes_seg, lobes_arr
 
 dataset = seg_dataset.SegmentSet(
@@ -127,25 +125,26 @@ np.savetxt(
 )
 
 # format data to be read by NN
-X = torch.Tensor(np.array([X.astype(np.float16)])).to(device)  # scan
+X = torch.Tensor(np.array([X.astype(np.float16)])).to(device)
+# do a forward pass on the NN
 logits = model(X)
-labelMap = torch.max(logits[0], 0)[1].numpy()
-labelMap = np.swapaxes(labelMap, 0, 2)
+# get class with highest probability of being airway for each voxel
+label_map = torch.max(logits[0], 0)[1].numpy()
+label_map = np.swapaxes(label_map, 0, 2)
 
-segmentation = [None] * len([1])
-for l, label in enumerate([1]):
-  segmentation[l] = utils.extract_largest_island(labelMap)
+# format and write airways segmentation
+image_to_write = sitk.GetImageFromArray(label_map.T)
+image_to_write.CopyInformation(X_orig)
+sitk.WriteImage(image_to_write, args.output_surface.replace(".stl", ".mhd"), True)
 
-  image_to_write = sitk.GetImageFromArray(segmentation[l].T)
-  image_to_write.CopyInformation(X_orig)
-  sitk.WriteImage(image_to_write, args.output_surface.replace(".stl", ".mhd"), True)
+# format and write airways surface mesh
+vol = v.Volume(
+  np.pad(label_map.T, 1),
+  spacing=X_orig.GetSpacing(),
+  origin=X_orig.GetOrigin(),
+)
+print(f"isosurface spacing {X_orig.GetSpacing()}")
+print("vol to isosurface")
+mesh = vol.isosurface()
+v.write(mesh, args.output_surface)
 
-  vol = v.Volume(
-    np.pad(segmentation[l].T, 1),
-    spacing=X_orig.GetSpacing(),
-    origin=X_orig.GetOrigin(),
-  )
-  print(f"isosurface spacing {X_orig.GetSpacing()}")
-  print("vol to isosurface")
-  mesh = vol.isosurface()
-  v.write(mesh, args.output_surface)

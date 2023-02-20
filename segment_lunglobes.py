@@ -70,16 +70,13 @@ if __name__ == "__main__":
   
   # check the index for all unique labels, as a debug check
   unique_labels = np.unique(labelmap)
-  assert np.all(np.array([0 1 2 3 4 5])==unique_labels), (
+  assert np.all(np.array([0, 1, 2, 3, 4, 5])==unique_labels), (
     f"unique labels not as expected {unique_labels}"
   )
   labelmap_img = sitk.GetImageFromArray(labelmap)
   labelmap_img.CopyInformation(input_img)
 
   out_dir = f"{LABELMAP_DIR}/unetsegmentation_{args.segID}_hofmanningerLTRClobes.mhd"
-  print("write image")
-  print(labelmap_img)
-  print("to dir ", out_dir)
   sitk.WriteImage(
     labelmap_img,
     out_dir,

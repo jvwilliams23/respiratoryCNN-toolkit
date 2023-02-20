@@ -56,6 +56,14 @@ class EarlyStopping:
         self.val_loss_min = val_loss
 
 
+def binary_erode(img, kernel_radius=3):
+  erode = sitk.BinaryErodeImageFilter()
+  erode.SetKernelRadius(kernel_radius)  # -Set radius to that defined above
+  erode.SetKernelType(2)  # -Set kernel shape to ball
+  image_erode = erode.Execute(img)
+  return image_erode
+
+
 # put I/O functions first, then general processing ones
 def convert_text_to_filenames(file_string):
   """

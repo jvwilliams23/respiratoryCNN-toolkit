@@ -14,7 +14,7 @@ First, install the required dependencies (best practice is to use a virtual envi
 ```bash
 conda create --name pycnn python=3.10
 conda activate pycnn
-pip install hjson numpy pandas torch torchio SimpleITK sklearn vedo
+pip install hjson numpy pandas torch torchio SimpleITK sklearn vedo lungmask
 ```
 
 ### Retraining
@@ -29,6 +29,15 @@ python3 train.py
 ```
 
 ### Using a CNN to segment an image
+To lower the memory consumption and inference time for segmenting the airways, we can first segment the lobes and use this as a bounding box for cropping the image
+```bash
+python segment_lunglobes.py -i /path/to/ct/scan.mhd -id example
+```
+The airways can then be segmented by 
+```bash
+python segment.py -i /path/to/ct/scan.mhd -o example.stl
+```
+which will create three files in the current directory (`example.mhd`, `example.zraw` and `example.stl`).
 
 ## Get Help
 Please submit an issue to the issues panel on this repository.
@@ -37,6 +46,20 @@ Please submit an issue to the issues panel on this repository.
 If you use the code or models in this repository, please cite our paper
 ```
 @article{TODO}
+```
+
+Also, if you use the `segment_lunglobes.py` script, make sure to read and cite the following great paper:
+```
+@article{hofmanninger2020automatic,
+  title={Automatic lung segmentation in routine imaging is primarily a data diversity problem, not a methodology problem},
+  author={Hofmanninger, Johannes and Prayer, Forian and Pan, Jeanny and R{\"o}hrich, Sebastian and Prosch, Helmut and Langs, Georg},
+  journal={European Radiology Experimental},
+  volume={4},
+  number={1},
+  pages={1--13},
+  year={2020},
+  publisher={SpringerOpen}
+}
 ```
 
 ## Acknowledgements

@@ -1,65 +1,43 @@
-Automated airway segmentation from chest CT scans using deep learning
+# Airway and lung segmentations using convolutional neural networks
 
-Table of content:
-- Motivation
-- Getting Started:
-- Built with  
-- Get Help
-- References
-- Acknowledgments
+## Overview
+This project aimed to train a machine learning algorithm capable of producing airway and lung segmentations from chest CT scans. 
 
-## Motivation
-This project aimed to train a machine learning algorithm capable of producing airway segmentations. This repo contains the relevant code to allow anyone to reproduce the training and segment a chest ct scan (hardware providing).
+This repository contains pre-trained pytorch CNNs that can be used to segment airways from chest CT scans. We also provide our training scripts that can be used to retrain the CNN models. We trained two CNN architectures on data from the LUNA16. We trained a U-Net which can provide higher accuracy segmentations but with high memory requirements and larger inference time. We also trained an ENet model, which has fewer parameters and allows for faster and less memory-intensive segmentation. This comes at the cost of slightly lower accuracy. A comparison between performance is given below for accuracy (DICE coefficient) and inference time.
+
+<img src="readme_images/cnn_comparison.png" width="800" />
+
+We also provide a script to segment the lung lobes using the 2D U-Net from [Hofmanninger et al. (2020)](https://github.com/JoHof/lungmask). This can be used to crop the CT scan to the lung bounding box, which improves computational efficiency.
 
 ## Getting Started
-Describe how to get started here.
- The data used in this project can be defined using the config.json file. Starting from the top: within path the directories for the ct scans, masks, labelled_list represent data directories used within model.py (training) and evalDICE.py (model evaluation). Whilst test_scans,unseen_masks and unseen_scans also within path represent data directories for unseen datasets used within evalDiceTest.py (unseen dataset model evaluation). Within train3d and segment3d the parameters used for training the model are set. 
+First, install the required dependencies (best practice is to use a virtual environment)
+```bash
+conda create --name pycnn python=3.10
+conda activate pycnn
+pip install hjson numpy pandas torch torchio SimpleITK sklearn vedo
+```
 
-### Usage
-Scripts don't take optional parameters: all parameters are set in the config.json. 
-To train the model use python train.py > logTrain. It is important to redirect output to logTrain since this is used to determine the current performance of the classifier. This is used in to determine when to stop training by taking a decrease of 5% in the validation DICE over 30 epochs as a cut off point for stopping the model. 
+### Retraining
+To retrain a CNN on some data you have available, add the paths to the images and labels as entries in a tabular file (`cnn_training_cases.txt`) formatted like so:
+```
+/path/to/image1 /path/to/label1
+/path/to/image2 /path/to/label2
+```
+These will then be split into train and validation sets (which are saved as `train_cases.txt` and `val_cases.txt`). Also you can edit any hyperparameters defined in `trainconfig.json` and run
+```bash
+python3 train.py
+```
 
-Once the model is trained it can be evaluated using evalDICE.py (python evalDICE.py) which outputs the results in files results.csv and rocresults.csv. Results are shown in the following format: 
-3948t DC    0645v DC
-0.960152855 0.952423835
-where the number (3948) represents the unique image ID, t training dataset (full list of train validation split given in logTrain), v validation dataset, DC dice coefficient and the number below gives the respective score.
+### Segmenting
 
-To segment the dataset defined using the first three parameters in path within config.json (see Getting started) run python segment.py which will output the segmentations to the directory ./segmentations.
-
-Code within utilities uses the structure: 
-├── modelName : model name used for training
-│   ├── rocresults : rocresults for modelName
-│   ├── results : results for modelName (DC,AUC,fbeta)
-│   ├── logTrain : training log file for modelName
-│   └── template3948 : template mesh for morphing new landmarks to create a new airway mesh
-
-boxplotDICEcoeff.py : plots DICECoeff and other pieces of data. To process models use airCAE1NEW=getfield("modelName") where modelName is the same as the model directory. These can be lined next to each other to get an array of the results: 
-airCA5=getfield("airCA5")
-airCAE1=getfield("airCAE1")
-airCAE3=getfield("airCAE3")
-airCAE5=getfield("airCAE5")
-airCAR1=getfield("airCAR1")
-To plot a different field to DC use airCA1=getfield("modelName","AUC"). Run using python boxplotDICEcoeff.py
-
-plotLogTrain.py : plots model residuals during training. To plot for modelName use modelName=airwayvalidationdata("modelName/logTrain"). 
-
-outlier.py: outputs datapoint outliers based on the following criteria 
-𝑖𝑓 𝐷𝐶𝑖≤ 𝐷𝑐̅̅̅−2𝜎 𝑂𝑅( 𝑞1−𝑞2)𝐼,
-where 𝑖 is the DICE for the 𝑖𝑡ℎ segmented scan, 𝐼 is the interquartile range, 𝑞 represents quartile range, 𝐷𝑐̅̅̅ is the average dice coefficient and 𝜎 is the standard deviation of the DICE.
-To run the script edit lines:
-modelName=outliers(modelName,"modelName") and run using python outsider.py. This script outputs a csv of outliers. 
-
-## Built With
-matplotlib
-numpy 
-pandas 
-
-python 3.9
 ## Get Help
-- Contact me on my-email@email.com
+Please submit an issue to the issues panel on this repository.
 
-## References
-List any key literature this project is based on.
+## Citing this repository
+If you use the code or models in this repository, please cite our paper
+```
+@article{TODO}
+```
 
 ## Acknowledgements
-Acknowledge the Open-Source projects / people that you've included in your solution.
+The model architecture scripts [`unet.py`](https://github.com/Thvnvtos/Lung_Segmentation/blob/unet3d/model.py) and [`enet.py`](https://github.com/davidtvs/PyTorch-ENet/blob/master/models/enet.py) were taken from other repositories (see links).

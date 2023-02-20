@@ -1,4 +1,4 @@
-# Airway and lung segmentations using convolutional neural networks
+# Convolutional neural network toolkit for segmenting airways and lungs
 
 ## Overview
 This project aimed to train a machine learning algorithm capable of producing airway and lung segmentations from chest CT scans. 

@@ -28,7 +28,7 @@ These will then be split into train and validation sets (which are saved as `tra
 python3 train.py
 ```
 
-### Segmenting
+### Using a CNN to segment an image
 
 ## Get Help
 Please submit an issue to the issues panel on this repository.

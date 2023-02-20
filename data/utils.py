@@ -1,14 +1,9 @@
-import numpy as np
-import torch
-import SimpleITK as sitk
 from copy import copy
 from sys import exit
-import vtk
-import vedo as v
-from skimage.measure import label
 
 import matplotlib.pyplot as plt
 import numpy as np
+import SimpleITK as sitk
 import torch
 
 class EarlyStopping:
@@ -244,6 +239,9 @@ def myshow(img, zpos="default", title=None, margin=0.05, dpi=80):
   plt.show()
 
 def numpy_to_surface(arr, spacing=[1, 1, 1], origin=[0, 0, 0], largest=True):
+  # import vedo here to avoid error on cluster with 
+  # ImportError: dlopen: cannot load any more object with static TLS
+  import vedo as v
   vol = v.Volume(arr, spacing=spacing, origin=origin)
   return vol.isosurface(largest=largest)
 

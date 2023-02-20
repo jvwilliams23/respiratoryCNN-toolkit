@@ -1,11 +1,14 @@
-import numpy as np
-import nrrd, os, scipy.ndimage
+import os
 from glob import glob
+
+import numpy as np
+import scipy.ndimage
+import SimpleITK as sitk
 import torch
 from torch.utils import data
-import SimpleITK as sitk
-from skimage import morphology
-from skimage.measure import label, regionprops
+
+#from skimage import morphology
+#from skimage.measure import label, regionprops
 from . import utils as u
 
 

@@ -1,36 +1,24 @@
 {
 // configuration for CNN training
 // file must be read with hjson 'pip install hjson', or remove comments
-    "path" :
-    {
-        //  training data images
-        "scans" : "/data/alc5/data/scans/cropped/airways",
-        // training data labelmaps
-        "masks" : "/data/alc5/data/segmentations/cropped/airways",
-    },
-
     "train3d" :
     {
         // which model to use in training (UNet or ENet)
-        "model" : "UNet",
+        "model" : "ENet",
         // max number of iterations
         "epochs" : 300,
         // number of samples trained on at once
         "batch_size" : 1,
         // learning rate
         "lr" : 1e-4,
-        // scan size if down-up sampling is desired
-        "scan_size" : [160,160,160],
-        // unsure (?) - check Ronneberger UNet paper
+        // Only for U-Net
         "start_filters" : 32,
-        // number of samples in training set
-        "train_size" : 40,
         // number of samples in validation set
         "validation_size" : 0.2,
         // number of classes (2 = foreground + background)
         "n_classes" : 2,
         // number of artificial/augmented datasets to create in training
-        "aug_iters" : 25,
+        "aug_iters" : 2,
         /* focal loss parameter for controlling loss 
             contribution from hard examples
         */

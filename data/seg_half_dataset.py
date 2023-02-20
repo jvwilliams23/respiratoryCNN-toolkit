@@ -1,16 +1,15 @@
 import logging
-import numpy as np
-import nrrd, os, scipy.ndimage
+import os  # , scipy.ndimage
+from copy import copy
 from glob import glob
+from math import ceil, floor
+
+import numpy as np
+import SimpleITK as sitk
 import torch
 from torch.utils import data
-import SimpleITK as sitk
-from math import floor, ceil
-from copy import copy
-from skimage import morphology
-from skimage.measure import label, regionprops
+
 from . import utils as u
-import vedo as v
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +18,6 @@ def truncate(image, min_bound, max_bound):
   image[image < min_bound] = min_bound
   image[image > max_bound] = max_bound
   return image
-
-
-def visualise_bb(arr, spacing, origin):
-  return v.Volume(arr, origin=origin, spacing=spacing).legosurface(
-    vmin=0.5, vmax=1
-  )
 
 
 def numpy_to_ints(arr):
@@ -61,19 +54,11 @@ def sliding_window_crop(image, num_boxes=5, crop_dir=2, overlap=2):
   lower_list = []
   mid_point_list = []
   upper_list = []
-  # image_island = getLargestIsland(image > -600)  # > 50 & image < 2000 #uppe
 
-  # label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
-  # label_shape_filter.Execute(image_island)
-  # bounding_box = np.array(label_shape_filter.GetBoundingBox(1))
   max_size = list(image.GetSize())  # [::-1]
   bounding_box = [0, 0, 0] + max_size
   bounding_box = np.array(bounding_box)
   roi_list = []
-  # vp += v.Volume(sitk.GetArrayFromImage(image))
-  # vp += visualise_bb(image_arr, spacing)
-  # vp.show()
-  # exit()
   print("sitk image shape", image.GetSize())
 
   bb_lower = bounding_box[0 : int(len(bounding_box) / 2)].T
@@ -89,8 +74,6 @@ def sliding_window_crop(image, num_boxes=5, crop_dir=2, overlap=2):
   ]
   roi_list.append(roi_i)
   vol = copy(roi_i)
-  # vp = v.Plotter()
-  # vp += visualise_bb(vol, spacing, origin=origin)
   # check bounds of box are OK
   print(f"bounding box is {bounding_box}")
   print()
@@ -306,11 +289,6 @@ class SegmentSet(data.Dataset):
     pad.SetPadUpperBound((1, 1, int(num_z_to_pad)))
     pad.SetConstant(0)
     ct_scanOrig = pad.Execute(ct_scanOrig)
-    # ct_scan=sitk.GetImageFromArray(ct_scan)
-    # if self.downsample:
-    #  ct_scanOrig = u.resample_image(ct_scanOrig, **self.kwargs)
-    #  print(f"downsampled image size is {ct_scanOrig.GetSize()}")
-    #   half = sitk.GetArrayFromImage(half)
     (
       roi_list,
       origin_list,

@@ -5,18 +5,17 @@ from sys import exit
 
 import hjson
 #import imgaug.augmenters as iaa
-import matplotlib.pyplot as plt
 import numpy as np
 from pandas import read_csv
 import torch
 import torch.optim as optim
 import torchio as tio
-from sklearn.model_selection import train_test_split
+#from sklearn.model_selection import train_test_split
 from torch.utils import data
 
 from data import *
 from enet import ENet
-from model import UNet
+from unet import UNet
 
 def get_inputs():
   parser = argparse.ArgumentParser(description=__doc__)
@@ -65,6 +64,8 @@ if os.path.isfile("train_cases.txt") and os.path.isfile("val_cases.txt"):
   train_scans, train_labels = convert_text_to_filenames("train_cases.txt")
   val_scans, val_labels = convert_text_to_filenames("val_cases.txt")
 else:
+  from sklearn.model_selection import train_test_split
+
   image_file_list, label_file_list = convert_text_to_filenames("cnn_training_cases.txt")
   train_scans, val_scans, train_labels, val_labels = train_test_split(
     image_file_list,
@@ -80,15 +81,10 @@ print("validation scans: ")
 for val_scan_i, val_labels_i in zip(val_scans, val_labels):
   print(val_scan_i, val_labels_i)
 
-# pack all dataset info into one list for readability
-dataset_params = [
-  config["train3d"]["scan_size"],
-  config["train3d"]["n_classes"],
-]
 # read data splits
-train_data = dataset.Dataset(train_scans, train_labels, *dataset_params)
+train_data = dataset.Dataset(train_scans, train_labels, config["train3d"]["n_classes"])
 print("train_data OK. Number of scans: ", len(train_data))
-val_data = dataset.Dataset(val_scans, val_labels, *dataset_params)
+val_data = dataset.Dataset(val_scans, val_labels, config["train3d"]["n_classes"])
 
 # select which model to train
 if config["train3d"]["model"].lower() == "unet":
@@ -105,7 +101,7 @@ if config["train3d"]["model"].lower() == "unet":
 elif config["train3d"]["model"].lower() == "enet":
   print("Training ENet")
   model = ENet(config["train3d"]["n_classes"]).to(device)
-  model_string = "enet"  # string to use for saving the model
+  model_string = "enet-"  # string to use for saving the model
 else:
   print("Unrecognised model. Exiting.")
   exit()

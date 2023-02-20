@@ -1,12 +1,14 @@
-import numpy as np
-import nrrd, os, scipy.ndimage
+import os
+import sys
 from glob import glob
+
+import numpy as np
+import SimpleITK as sitk
 import torch
 from torch.utils import data
-import SimpleITK as sitk
-import sys
 
 from . import utils
+
 
 def truncate(image, min_bound, max_bound):
     image[image < min_bound] = min_bound
@@ -77,10 +79,9 @@ class Dataset(data.Dataset):
     list_scans is a list containing the filenames of scans
     scans_path and masks_path are the paths of the folders containing the data
   """
-  def __init__(self, scans_path, labels_path, scan_size = [128, 128, 128], n_classes = 5):
+  def __init__(self, scans_path, labels_path, n_classes = 5):
     self.scans_path = scans_path
     self.labels_path = labels_path
-    self.scan_size = scan_size
     self.n_classes = n_classes
 
   def __len__(self):
@@ -89,8 +90,8 @@ class Dataset(data.Dataset):
   def __getitem__(self, index):
 
     #load scan and mask
-    ct_scan = utils.read_image(self.scans_path[index])
-    seg_mask = utils.read_image(self.labels_path[index])
+    ct_scan = sitk.GetArrayFromImage(utils.read_image(self.scans_path[index]))
+    seg_mask = sitk.GetArrayFromImage(utils.read_image(self.labels_path[index]))
 
     if self.n_classes == 5 or self.n_classes == 6:
       seg_mask[seg_mask == 0] = 0

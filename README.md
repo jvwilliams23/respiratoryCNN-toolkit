@@ -25,7 +25,7 @@ To retrain a CNN on some data you have available, add the paths to the images an
 ```
 These will then be split into train and validation sets (which are saved as `train_cases.txt` and `val_cases.txt`). Also you can edit any hyperparameters defined in `trainconfig.json` and run
 ```bash
-python3 train.py
+python train.py
 ```
 
 ### Using a CNN to segment an image

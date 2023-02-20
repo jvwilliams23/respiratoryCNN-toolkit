@@ -1,0 +1,25 @@
+{
+   "segment3d" :
+    {
+        "n_classes" : 2,
+        "crop_fraction": 0,
+        "downsample" : [1, 1, 1],
+        "downsampling_on" : false, //true, //"n",
+        "num_boxes" : 1, // number of boxes in sliding window approach
+        "crop_to_lobes" : true, //"n",//"y",
+        "lobes_dir" : "images_lobes/example/*mhd",
+        "output_id": "example",
+        "resampling_on" : false
+    },
+    "train3d" :
+    {
+        // which model to use in training (UNet or ENet)
+        "model" : "ENet",
+        // Only used for UNet
+        "start_filters" : 32,
+        // number of classes (2 = foreground + background)
+        "n_classes" : 2,
+    },
+
+}
+

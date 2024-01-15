@@ -1,5 +1,7 @@
 # Convolutional neural network toolkit for segmenting airways and lungs
 
+[![DOI](https://zenodo.org/badge/382374321.svg)](https://zenodo.org/badge/latestdoi/382374321)
+
 ## Overview
 This project aimed to train a machine learning algorithm capable of producing airway and lung segmentations from chest CT scans. 
 

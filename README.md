@@ -47,7 +47,16 @@ Please submit an issue to the issues panel on this repository.
 ## Citing this repository
 If you use the code or models in this repository, please cite our paper
 ```
-@article{TODO}
+@article{williams2024validated,
+  title={Validated respiratory drug deposition predictions from 2D and 3D medical images with statistical shape models and convolutional neural networks},
+  author={Williams, Josh and Ahlqvist, Haavard and Cunningham, Alexander and Kirby, Andrew and Katz, Ira and Fleming, John and Conway, Joy and Cunningham, Steve and Ozel, Ali and Wolfram, Uwe},
+  journal={Plos one},
+  volume={19},
+  number={1},
+  pages={e0297437},
+  year={2024},
+  publisher={Public Library of Science San Francisco, CA USA}
+}
 ```
 
 Also, if you use the `segment_lunglobes.py` script, make sure to read and cite the following great paper:
